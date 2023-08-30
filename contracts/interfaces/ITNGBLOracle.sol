@@ -9,10 +9,7 @@ interface ITNGBLOracle {
     }
 
     // returns the index of the observation corresponding to the given timestamp
-    function observationIndexOf(uint256 timestamp)
-        external
-        view
-        returns (uint8 index);
+    function observationIndexOf(uint256 timestamp) external view returns (uint8 index);
 
     // update the cumulative price for the observation at the current timestamp. each observation is updated at most
     // once per epoch period.

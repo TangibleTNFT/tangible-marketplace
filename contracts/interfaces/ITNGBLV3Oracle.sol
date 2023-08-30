@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity >=0.5.0 <=0.8.7;
+pragma solidity >=0.5.0 <=0.8.19;
 
 interface ITNGBLV3Oracle {
     // returns the amount out corresponding to the amount in for a given token using the moving average over the time

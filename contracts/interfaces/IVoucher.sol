@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity 0.8.7;
+pragma solidity ^0.8.19;
 
 import "./ITangibleNFT.sol";
 
@@ -13,15 +13,6 @@ interface IVoucher {
         address buyer;
         uint256 fingerprint;
         bool sendToVendor;
-    }
-
-    struct MintInitialFractionVoucher {
-        address seller;
-        address tnft;
-        uint256 tnftTokenId;
-        uint256 keepShare;
-        uint256 sellShare;
-        uint256 sellPrice;
     }
 
     /// @dev Voucher for lazy-burning

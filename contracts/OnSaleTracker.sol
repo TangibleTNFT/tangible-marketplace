@@ -1,13 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity 0.8.7;
+pragma solidity ^0.8.19;
 
 import "./interfaces/IOnSaleTracker.sol";
-import "./abstract/AdminAccess.sol";
+import "./interfaces/IFactoryProvider.sol";
+import "./interfaces/IOwnable.sol";
+import "./abstract/FactoryModifiers.sol";
 
-contract OnSaleTracker is IOnSaleTracker, AdminAccess {
+/**
+ * @title OnSaleTracker
+ * @author Tangible.store
+ * @notice This contract tracks the status of TNFTs listed on the Marketplace
+ */
+contract OnSaleTracker is IOnSaleTracker, FactoryModifiers {
+    // ~ State Variables ~
+
     struct TokenArray {
         uint256[] tokenIds;
     }
+
     struct ContractItem {
         bool selling;
         uint256 index;
@@ -19,137 +29,42 @@ contract OnSaleTracker is IOnSaleTracker, AdminAccess {
         uint256 indexInCurrentlySelling;
     }
 
-    struct FractionSaleItem {
-        ITangibleFractionsNFT ftnft;
-        uint256 fractionId;
-        uint256 indexInCurrentlySelling;
-    }
-
-    ITangibleFractionsNFT[] public fractionContractsOnSale;
-    mapping(ITangibleFractionsNFT => ContractItem) public isFtnftOnSale;
-    mapping(ITangibleFractionsNFT => uint256[]) public fractionTokensOnSale;
-    mapping(ITangibleFractionsNFT => mapping(uint256 => FractionSaleItem))
-        public fractionSaleMapper;
-
-    //return whole array
-    function getFractionContractsOnSale()
-        external
-        view
-        returns (ITangibleFractionsNFT[] memory)
-    {
-        return fractionContractsOnSale;
-    }
-
-    //return size
-    function fractionContractsOnSaleSize() external view returns (uint256) {
-        return fractionContractsOnSale.length;
-    }
-
-    //return whole array
-    function getFractionTokensOnSale(ITangibleFractionsNFT ftnft)
-        external
-        view
-        returns (uint256[] memory)
-    {
-        return fractionTokensOnSale[ftnft];
-    }
-
-    //return whole batch arrays
-    function getFractionTokensOnSaleBatch(
-        ITangibleFractionsNFT[] calldata ftnfts
-    ) external view returns (TokenArray[] memory result) {
-        uint256 length = ftnfts.length;
-        result = new TokenArray[](length);
-        for (uint256 i; i < length; i++) {
-            TokenArray memory temp = TokenArray(
-                fractionTokensOnSale[ftnfts[i]]
-            );
-            result[i] = temp;
-        }
-        return result;
-    }
-
-    //return size
-    function fractionTokensOnSaleSize(ITangibleFractionsNFT ftnft)
-        external
-        view
-        returns (uint256)
-    {
-        return fractionTokensOnSale[ftnft].length;
-    }
-
+    /// @notice Array of TangibleNFT categories that are being sold on the marketplace.
     ITangibleNFT[] public tnftCategoriesOnSale;
+
+    /// @notice Used to map TNFT category to whether it has tokens for sale and where it exists in `tnftCategoriesOnSale`.
     mapping(ITangibleNFT => ContractItem) public isTnftOnSale;
+
+    /// @notice Used to store an array of tokenIds that are listed on sale for each TNFT category.
     mapping(ITangibleNFT => uint256[]) public tnftTokensOnSale;
-    mapping(ITangibleNFT => mapping(uint256 => TnftSaleItem))
-        public tnftSaleMapper;
 
-    //return whole array
-    function getTnftCategoriesOnSale()
-        external
-        view
-        returns (ITangibleNFT[] memory)
-    {
-        return tnftCategoriesOnSale;
-    }
+    /// @notice Used to track each TNFT item that's on sale and where it exists inside `tnftTokensOnSale[]`.
+    mapping(ITangibleNFT => mapping(uint256 => TnftSaleItem)) public tnftSaleMapper;
 
-    //return size
-    function tnftCategoriesOnSaleSize() external view returns (uint256) {
-        return tnftCategoriesOnSale.length;
-    }
-
-    //return whole array
-    function getTnftTokensOnSale(ITangibleNFT tnft)
-        external
-        view
-        returns (uint256[] memory)
-    {
-        return tnftTokensOnSale[tnft];
-    }
-
-    //return whole batch arrays
-    function getTnftTokensOnSaleBatch(ITangibleNFT[] calldata tnfts)
-        external
-        view
-        returns (TokenArray[] memory result)
-    {
-        uint256 length = tnfts.length;
-        result = new TokenArray[](length);
-        for (uint256 i; i < length; i++) {
-            TokenArray memory temp = TokenArray(tnftTokensOnSale[tnfts[i]]);
-            result[i] = temp;
-        }
-        return result;
-    }
-
-    //return size
-    function tnftTokensOnSaleSize(ITangibleNFT tnft)
-        external
-        view
-        returns (uint256)
-    {
-        return tnftTokensOnSale[tnft].length;
-    }
-
+    /// @notice Stores the address of the Marketplace contract.
     address public marketplace;
 
-    constructor() {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    }
+    // ~ Constructor ~
+    /**
+     * @notice Initialize OnSaleTracker
+     */
+    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
 
-    function setMarketplace(address _marketplace) external onlyAdmin {
-        marketplace = _marketplace;
-    }
+    // ~ Functions ~
 
-    function tnftSalePlaced(
-        ITangibleNFT tnft,
-        uint256 tokenId,
-        bool place
-    ) external override {
+    /**
+     * @notice This external function is used to update the status of any listings on the Marketplace contract.
+     * @dev Only callable by `marketplace`.
+     * @param tnft TangibleNFT contract reference -> TNFT contract the `tokenId` derives from.
+     * @param tokenId TNFT identifier.
+     * @param place If true, the TNFT is being listed for sale, otherwise false.
+     */
+    function tnftSalePlaced(ITangibleNFT tnft, uint256 tokenId, bool place) external override {
         require(msg.sender == marketplace);
 
         if (place) {
             //check if something from this category is on sale already
+            require(tnft.ownerOf(tokenId) == marketplace, "TM not owner");
             if (!isTnftOnSale[tnft].selling) {
                 //add category to actively selling list
                 tnftCategoriesOnSale.push(tnft);
@@ -167,10 +82,11 @@ contract OnSaleTracker is IOnSaleTracker, AdminAccess {
             tnftSaleMapper[tnft][tokenId] = tsi;
         } else {
             //something is removed from marketplace
-            uint256 indexInTokenSale = tnftSaleMapper[tnft][tokenId]
-                .indexInCurrentlySelling;
+            require(tnft.ownerOf(tokenId) != marketplace, "TM still owner");
+            uint256 indexInTokenSale = tnftSaleMapper[tnft][tokenId].indexInCurrentlySelling;
             _removeCurrentlySellingTnft(tnft, indexInTokenSale);
             delete tnftSaleMapper[tnft][tokenId];
+
             if (tnftTokensOnSale[tnft].length == 0) {
                 //all tokens are removed, nothing in category is selling anymore
                 _removeCategory(isTnftOnSale[tnft].index);
@@ -179,70 +95,17 @@ contract OnSaleTracker is IOnSaleTracker, AdminAccess {
         }
     }
 
-    function ftnftSalePlaced(
-        ITangibleFractionsNFT ftnft,
-        uint256 tokenId,
-        bool place
-    ) external override {
-        require(msg.sender == marketplace);
-
-        if (place) {
-            //check if something from this category is on sale already
-            if (!isFtnftOnSale[ftnft].selling) {
-                //add category to actively selling list
-                fractionContractsOnSale.push(ftnft);
-                isFtnftOnSale[ftnft].selling = true;
-                isFtnftOnSale[ftnft].index = fractionContractsOnSale.length - 1;
-            }
-            //something is added to marketplace
-            fractionTokensOnSale[ftnft].push(tokenId);
-            FractionSaleItem memory fsi = FractionSaleItem(
-                ftnft,
-                tokenId,
-                (fractionTokensOnSale[ftnft].length - 1)
-            );
-            fractionSaleMapper[ftnft][tokenId] = fsi;
-        } else {
-            //something is removed from marketplace
-            uint256 indexInTokenSale = fractionSaleMapper[ftnft][tokenId]
-                .indexInCurrentlySelling;
-            _removeCurrentlySellingFraction(ftnft, indexInTokenSale);
-            delete fractionSaleMapper[ftnft][tokenId];
-            if (fractionTokensOnSale[ftnft].length == 0) {
-                //all tokens are removed, nothing in category is selling anymore
-                _removeFraction(isFtnftOnSale[ftnft].index);
-                delete isFtnftOnSale[ftnft];
-            }
-        }
-    }
-
     //this function is not preserving order, and we don't care about it
-    function _removeCurrentlySellingFraction(
-        ITangibleFractionsNFT ftnft,
-        uint256 index
-    ) internal {
-        require(index < fractionTokensOnSale[ftnft].length, "IndexF");
-        //take last token
-        uint256 tokenId = fractionTokensOnSale[ftnft][
-            fractionTokensOnSale[ftnft].length - 1
-        ];
-
-        //replace it with the one we are removing
-        fractionTokensOnSale[ftnft][index] = tokenId;
-        //set it's new index in saleData
-        fractionSaleMapper[ftnft][tokenId].indexInCurrentlySelling = index;
-        fractionTokensOnSale[ftnft].pop();
-    }
-
-    //this function is not preserving order, and we don't care about it
-    function _removeCurrentlySellingTnft(ITangibleNFT tnft, uint256 index)
-        internal
-    {
+    /**
+     * @notice This internal function removes a token from `tnftTokensOnSale`.
+     * @param tnft TangibleNft contract. From which category we're removing a token for.
+     * @param index Index in the `tnftTokensOnSale` we're removing the token from.
+     */
+    function _removeCurrentlySellingTnft(ITangibleNFT tnft, uint256 index) internal {
         require(index < tnftTokensOnSale[tnft].length, "IndexT");
+
         //take last token
-        uint256 tokenId = tnftTokensOnSale[tnft][
-            tnftTokensOnSale[tnft].length - 1
-        ];
+        uint256 tokenId = tnftTokensOnSale[tnft][tnftTokensOnSale[tnft].length - 1];
 
         //replace it with the one we are removing
         tnftTokensOnSale[tnft][index] = tokenId;
@@ -251,12 +114,15 @@ contract OnSaleTracker is IOnSaleTracker, AdminAccess {
         tnftTokensOnSale[tnft].pop();
     }
 
+    /**
+     * @notice This internal method removes a category from `tnftCategoriesOnSale`.
+     * @param index Index of category in the array to remove.
+     */
     function _removeCategory(uint256 index) internal {
         require(index < tnftCategoriesOnSale.length, "IndexC");
+
         //take last token
-        ITangibleNFT _tnft = tnftCategoriesOnSale[
-            tnftCategoriesOnSale.length - 1
-        ];
+        ITangibleNFT _tnft = tnftCategoriesOnSale[tnftCategoriesOnSale.length - 1];
 
         //replace it with the one we are removing
         tnftCategoriesOnSale[index] = _tnft;
@@ -265,17 +131,67 @@ contract OnSaleTracker is IOnSaleTracker, AdminAccess {
         tnftCategoriesOnSale.pop();
     }
 
-    function _removeFraction(uint256 index) internal {
-        require(index < fractionContractsOnSale.length, "IndexFr");
-        //take last token
-        ITangibleFractionsNFT _ftnft = fractionContractsOnSale[
-            fractionContractsOnSale.length - 1
-        ];
+    /**
+     * @notice This restricted function allows the admin to update the `marketplace` state variable.
+     * @param _marketplace Address of new Marketplace contract.
+     */
+    function setMarketplace(address _marketplace) external onlyFactoryOwner {
+        marketplace = _marketplace;
+    }
 
-        //replace it with the one we are removing
-        fractionContractsOnSale[index] = _ftnft;
-        //set it's new index in saleData
-        isFtnftOnSale[_ftnft].index = index;
-        fractionContractsOnSale.pop();
+    /**
+     * @notice This view function returns the TNFTs listed for sale from a specified category.
+     * @param tnfts TangibleNFT contract reference -> Category identifier.
+     * @return result Array of tokenIds that are listed for sale on the Marketplace.
+     */
+    function getTnftTokensOnSaleBatch(
+        ITangibleNFT[] calldata tnfts
+    ) external view returns (TokenArray[] memory result) {
+        uint256 length = tnfts.length;
+        result = new TokenArray[](length);
+
+        for (uint256 i; i < length; ) {
+            TokenArray memory temp = TokenArray(tnftTokensOnSale[tnfts[i]]);
+            result[i] = temp;
+
+            unchecked {
+                ++i;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @notice This view method returns the size of the `tnftTokensOnSale` mapped array.
+     * @param tnft TangibleNFT contract.
+     * @return Length of array.
+     */
+    function tnftTokensOnSaleSize(ITangibleNFT tnft) external view returns (uint256) {
+        return tnftTokensOnSale[tnft].length;
+    }
+
+    /**
+     * @notice This function returns the `tnftCategoriesOnSale` array.
+     * @return Array of type ITangibleNFT.
+     */
+    function getTnftCategoriesOnSale() external view returns (ITangibleNFT[] memory) {
+        return tnftCategoriesOnSale;
+    }
+
+    /**
+     * @notice This function returns the length of `tnftCategoriesOnSale` array.
+     * @return Length of array.
+     */
+    function tnftCategoriesOnSaleSize() external view returns (uint256) {
+        return tnftCategoriesOnSale.length;
+    }
+
+    /**
+     * @notice This view method returns the `tnftTokensOnSale` mapped array.
+     * @param tnft TangibleNFT contract.
+     * @return Array of type uint26.
+     */
+    function getTnftTokensOnSale(ITangibleNFT tnft) external view returns (uint256[] memory) {
+        return tnftTokensOnSale[tnft];
     }
 }

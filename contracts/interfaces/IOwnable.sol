@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity 0.8.7;
+pragma solidity ^0.8.19;
 
 interface IOwnable {
-    event OwnershipPushed(
-        address indexed previousOwner,
-        address indexed newOwner
-    );
-    event OwnershipPulled(
-        address indexed previousOwner,
-        address indexed newOwner
-    );
+    event OwnershipPushed(address indexed previousOwner, address indexed newOwner);
+    event OwnershipPulled(address indexed previousOwner, address indexed newOwner);
 
     function contractOwner() external view returns (address);
 

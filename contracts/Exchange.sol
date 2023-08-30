@@ -1,152 +1,156 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity 0.8.7;
+pragma solidity ^0.8.19;
 
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./abstract/FactoryModifiers.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IWETH9.sol";
-import "./abstract/AdminAccess.sol";
 import "./interfaces/IExchange.sol";
+import "./interfaces/IOwnable.sol";
+import "./interfaces/IFactoryProvider.sol";
+import "./exchangeInterfaces/IPearlRouter.sol";
 
-contract Exchange is IExchange, AdminAccess {
+/**
+ * @title Exchange
+ * @author Tangible.store
+ * @notice This contract is used to exchange Erc20 tokens.
+ */
+contract ExchangeV2 is IExchange, FactoryModifiers {
     using SafeERC20 for IERC20;
-    bytes32 constant ROUTER_POLICY_ROLE = bytes32(keccak256("ROUTER_POLICY"));
 
-    address public immutable override router = address(0);
+    // ~ State Variables ~
+
+    /// @notice Mapping of concatenated pairs to router address.
     mapping(bytes => address) public routers;
-    mapping(address => bool) public tngblPoolTokens;
-    IERC20 public immutable DAI;
-    IERC20 public immutable TNGBL;
 
-    constructor(address _dai, address _tngbl) {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(ROUTER_POLICY_ROLE, msg.sender);
-        DAI = IERC20(_dai);
-        TNGBL = IERC20(_tngbl);
-        tngblPoolTokens[_dai] = true;
-    }
+    /// @notice TODO
+    mapping(bytes => IRouter.Route[]) public routePaths;
 
+    /// @notice TODO
+    mapping(bytes => bool) public simpleSwap;
+
+    /// @notice TODO
+    mapping(bytes => bool) public stable;
+
+    // ~ Constructor ~
+
+    /**
+     * @notice Initializes the Exchange contract
+     * @param _factoryProvider Address for the FactoryProvider contract.
+     */
+    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
+
+    // ~ External Funcions ~
+
+    /**
+     * @notice This function allows the factory owner to add a new router address to a supported pair.
+     * @param tokenInAddress Address of Erc20 token we're exchanging from.
+     * @param tokenOutAddress Address of Erc20 token we're exchanging to.
+     * @param _router Address of router.
+     */
     function addRouterForTokens(
         address tokenInAddress,
         address tokenOutAddress,
-        address _router
-    ) external onlyRole(ROUTER_POLICY_ROLE) {
-        bytes memory tokenized = abi.encodePacked(
-            tokenInAddress,
-            tokenOutAddress
-        );
-        bytes memory tokenizedReverse = abi.encodePacked(
-            tokenOutAddress,
-            tokenInAddress
-        );
+        address _router,
+        IRouter.Route[] calldata _routes,
+        IRouter.Route[] calldata _routesReversed,
+        bool _simpleSwap,
+        bool _stable
+    ) external onlyFactoryOwner {
+        bytes memory tokenized = abi.encodePacked(tokenInAddress, tokenOutAddress);
+        bytes memory tokenizedReverse = abi.encodePacked(tokenOutAddress, tokenInAddress);
+        // set routes
         routers[tokenized] = _router;
         routers[tokenizedReverse] = _router;
+        // set paths if any
+        for (uint256 i; i < _routes.length; ) {
+            routePaths[tokenized][i] = _routes[i];
+            routePaths[tokenizedReverse][i] = _routesReversed[i];
+            unchecked {
+                ++i;
+            }
+        }
+        // set if simple swap or with hops
+        simpleSwap[tokenized] = _simpleSwap;
+        simpleSwap[tokenizedReverse] = _simpleSwap;
+        //set if pool is stable or not
+        stable[tokenized] = _stable;
+        stable[tokenizedReverse] = _stable;
     }
 
+    /**
+     * @notice This function exchanges a specified Erc20 token for another Erc20 token.
+     * @param tokenIn Address of Erc20 token being token from owner.
+     * @param tokenOut Address of Erc20 token being given to the owner.
+     * @param amountIn Amount of `tokenIn` to be exchanged.
+     * @param minAmountOut The minimum amount expected from `tokenOut`.
+     * @return Amount of returned `tokenOut` tokens.
+     */
     function exchange(
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
         uint256 minAmountOut
-    ) external override returns (uint256) {
-        address[] memory path = new address[](2);
+    ) external returns (uint256) {
         uint256[] memory amounts = new uint256[](2);
-        path[0] = tokenIn;
-        path[1] = tokenOut;
 
+        bytes memory tokenized = abi.encodePacked(tokenIn, tokenOut);
+
+        address _router = routers[tokenized];
+        require(address(0) != _router, "router 0 ng");
         //take the token
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
+        //approve the router
+        IERC20(tokenIn).approve(_router, amountIn);
 
-        if (tokenIn != address(TNGBL) && tokenOut != address(TNGBL)) {
-            bytes memory tokenized = abi.encodePacked(tokenIn, tokenOut);
-            address _router = routers[tokenized];
-            require(address(0) != _router, "router 0 ng");
-
-            //approve the router
-            IERC20(tokenIn).approve(_router, amountIn);
-            amounts = IUniswapV2Router01(_router).swapExactTokensForTokens(
+        if (simpleSwap[tokenized]) {
+            amounts = IRouter(_router).swapExactTokensForTokensSimple(
                 amountIn,
                 minAmountOut,
-                path,
-                address(this),
-                block.timestamp + 15 // on sushi?
+                tokenIn,
+                tokenOut,
+                stable[tokenized],
+                msg.sender,
+                block.timestamp
             );
         } else {
-            path[1] = address(DAI);
-            bytes memory tokenized = abi.encodePacked(tokenIn, address(DAI));
-            address _router = routers[tokenized];
-            require(address(0) != _router, "router 0 tg");
-
-            //approve the router
-            IERC20(tokenIn).approve(_router, amountIn);
-
-            amounts = IUniswapV2Router01(_router).swapExactTokensForTokens(
+            amounts = new uint256[](routePaths[tokenized].length);
+            amounts = IRouter(_router).swapExactTokensForTokens(
                 amountIn,
-                0,
-                path,
-                address(this),
-                block.timestamp + 15 // on sushi?
-            );
-
-            path[0] = address(DAI);
-            path[1] = tokenOut;
-            //set for new
-            tokenized = abi.encodePacked(address(DAI), tokenOut);
-            _router = routers[tokenized];
-            require(address(0) != _router, "router 0 mg");
-
-            // we swapped to dai and now we swap from dai to tngbl
-            IERC20(DAI).approve(_router, amounts[1]);
-
-            amounts = IUniswapV2Router01(_router).swapExactTokensForTokens(
-                amounts[1],
-                0,
-                path,
-                address(this),
-                block.timestamp + 15 // on sushi?
+                minAmountOut,
+                routePaths[tokenized],
+                msg.sender,
+                block.timestamp
             );
         }
 
-        //send converted to caller
-        IERC20(tokenOut).safeTransfer(msg.sender, amounts[1]);
-        return amounts[1]; //returns output token amount
+        return amounts[amounts.length - 1]; //returns output token amount
     }
 
+    /**
+     * @notice This method is used to fetch a quote for an exchange.
+     * @param tokenIn Address of Erc20 token being token from owner.
+     * @param tokenOut Address of Erc20 token being given to the owner.
+     * @param amountIn Amount of `tokenIn` to be exchanged.
+     * @return Amount of `tokenOut` tokens for quote.
+     */
     function quoteOut(
         address tokenIn,
         address tokenOut,
         uint256 amountIn
-    ) external view override returns (uint256) {
-        address[] memory path = new address[](2);
+    ) external view returns (uint256) {
         uint256[] memory amounts = new uint256[](2);
-        path[0] = tokenIn;
-        path[1] = tokenOut;
 
-        if (tokenIn != address(TNGBL) && tokenOut != address(TNGBL)) {
-            bytes memory tokenized = abi.encodePacked(tokenIn, tokenOut);
-            address _router = routers[tokenized];
-            require(address(0) != _router, "router 0 qo");
+        bytes memory tokenized = abi.encodePacked(tokenIn, tokenOut);
+        address _router = routers[tokenized];
+        require(address(0) != _router, "router 0 qo");
 
-            amounts = IUniswapV2Router01(_router).getAmountsOut(amountIn, path);
+        if (simpleSwap[tokenized]) {
+            (amounts[1], ) = IRouter(_router).getAmountOut(amountIn, tokenIn, tokenOut);
         } else {
-            path[1] = address(DAI);
-            bytes memory tokenized = abi.encodePacked(tokenIn, address(DAI));
-            address _router = routers[tokenized];
-            require(address(0) != _router, "router 0 lo");
-
-            amounts = IUniswapV2Router01(_router).getAmountsOut(amountIn, path);
-
-            path[0] = address(DAI);
-            path[1] = tokenOut;
-            //set for new
-            tokenized = abi.encodePacked(address(DAI), tokenOut);
-            _router = routers[tokenized];
-            require(address(0) != _router, "router 0 bo");
-
-            amounts = IUniswapV2Router01(_router).getAmountsOut(
-                amounts[1],
-                path
-            );
+            amounts = new uint256[](routePaths[tokenized].length);
+            amounts = IRouter(_router).getAmountsOut(amountIn, routePaths[tokenized]);
         }
-        return amounts[1];
+
+        return amounts[amounts.length - 1];
     }
 }

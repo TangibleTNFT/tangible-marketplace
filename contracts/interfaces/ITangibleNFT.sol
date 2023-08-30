@@ -1,26 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity 0.8.7;
+pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 
-/// @title ITangibleNFT interface defines the interface of the TangibleNFT
-interface ITangibleNFT is IERC721, IERC721Metadata, IERC721Enumerable {
-    event StoragePricePerYearSet(uint256 oldPrice, uint256 newPrice);
-    event StoragePercentagePricePerYearSet(
-        uint256 oldPercentage,
-        uint256 newPercentage
-    );
-    event StorageFeeToPay(
-        uint256 indexed tokenId,
-        uint256 _years,
-        uint256 amount
-    );
-    event ProducedTNFTs(uint256[] tokenId);
+/// @title ITangibleNFT interface defines the interface of the TangibleNFT contract.
 
+interface ITangibleNFT is IERC721, IERC721Metadata {
+    /// @notice This struct defines a Feature object
+    /// @param feature Feature identifier.
+    /// @param index Index in `tokenFeatures` array.
+    /// @param added If feature added, true.
+    struct FeatureInfo {
+        uint256 feature;
+        uint256 index;
+        bool added;
+    }
+
+    /// @dev This method returns the contract's `symbol` appended to the `_baseUriLink`.
     function baseSymbolURI() external view returns (string memory);
+
+    /// @dev This returns the decimal point precision for storage fees.
+    function storageDecimals() external view returns (uint8);
 
     /// @dev Function allows a Factory to mint multiple tokenIds for provided vendorId to the given address(stock storage, usualy marketplace)
     /// with provided count.
@@ -30,30 +33,20 @@ interface ITangibleNFT is IERC721, IERC721Metadata, IERC721Enumerable {
         address toStock
     ) external returns (uint256[] memory);
 
-    /// @dev Function that allows the Factory change redeem/statuses.
-    function setTNFTStatuses(
-        uint256[] calldata tokenIds,
-        bool[] calldata inOurCustody
-    ) external;
-
     /// @dev The function returns whether storage fee is paid for the current time.
     function isStorageFeePaid(uint256 tokenId) external view returns (bool);
 
-    /// @dev The function returns whether tnft is eligible for rent.
-    function paysRent() external view returns (bool);
+    /// @dev This returns the storage expiration date for each `tokenId`.
+    function storageEndTime(uint256 tokenId) external view returns (uint256 storageEnd);
 
-    function storageEndTime(uint256 tokenId)
-        external
-        view
-        returns (uint256 storageEnd);
-
+    /// @dev This returns if a specified `tokenId` is blacklisted.
     function blackListedTokens(uint256 tokenId) external view returns (bool);
 
     /// @dev The function returns the price per year for storage.
     function storagePricePerYear() external view returns (uint256);
 
     /// @dev The function returns the percentage of item price that is used for calculating storage.
-    function storagePercentagePricePerYear() external view returns (uint256);
+    function storagePercentagePricePerYear() external view returns (uint16);
 
     /// @dev The function returns whether storage for the TNFT is paid in fixed amount or in percentage from price
     function storagePriceFixed() external view returns (bool);
@@ -61,35 +54,27 @@ interface ITangibleNFT is IERC721, IERC721Metadata, IERC721Enumerable {
     /// @dev The function returns whether storage for the TNFT is required. For example houses don't have storage
     function storageRequired() external view returns (bool);
 
-    function setRolesForFraction(address ftnft, uint256 tnftTokenId) external;
-
     /// @dev The function returns the token fingerprint - used in oracle
     function tokensFingerprint(uint256 tokenId) external view returns (uint256);
 
-    function tnftToPassiveNft(uint256 tokenId) external view returns (uint256);
+    /// @dev The function accepts takes tokenId, and years, sets storage and returns if storage is fixed or percentage.
+    function adjustStorage(uint256 tokenId, uint256 _years) external returns (bool);
 
-    function claim(uint256 tokenId, uint256 amount) external;
+    /// @dev This method is used to return the array stored in `tokenFeatures` mapping.
+    function getTokenFeatures(uint256 tokenId) external view returns (uint256[] memory);
 
-    /// @dev The function returns the token string id which is tied to fingerprint
-    function fingerprintToProductId(uint256 fingerprint)
-        external
-        view
-        returns (string memory);
+    /// @dev This method is used to return the length of `tokenFeatures` mapped array.
+    function getTokenFeaturesSize(uint256 tokenId) external view returns (uint256);
 
-    /// @dev The function returns lockable percentage of tngbl token e.g. 5000 - 5% 500 - 0.5% 50 - 0.05%.
-    function lockPercent() external view returns (uint256);
+    /// @dev Returns the type identifier for this category.
+    function tnftType() external view returns (uint256);
+}
 
-    function lockTNGBL(
+/// @title ITangibleNFTExt interface defines the extended interface of the TangibleNFT contract.
+interface ITangibleNFTExt is ITangibleNFT {
+    /// @dev Returns the feature status of a `tokenId`.
+    function tokenFeatureAdded(
         uint256 tokenId,
-        uint256 _years,
-        uint256 lockedAmount,
-        bool onlyLock
-    ) external;
-
-    /// @dev The function accepts takes tokenId, its price and years sets storage and returns amount to pay for.
-    function adjustStorageAndGetAmount(
-        uint256 tokenId,
-        uint256 _years,
-        uint256 tokenPrice
-    ) external returns (uint256);
+        uint256 feature
+    ) external view returns (FeatureInfo memory);
 }

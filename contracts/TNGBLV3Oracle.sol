@@ -3,13 +3,15 @@ pragma solidity 0.7.6;
 
 import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
 import "@uniswap/v3-periphery/contracts/libraries/OracleLibrary.sol";
-
 import "./interfaces/ITNGBLV3Oracle.sol";
 
+/**
+ * @title TNGBLV3Oracle
+ * @author Tangible.store
+ */
 contract TNGBLV3Oracle is ITNGBLV3Oracle {
-    address public immutable uniV3Factory =
-        0x1F98431c8aD98523631AE4a59f267346ea31F984;
-    uint24 public immutable poolFeeDefault = 3000;
+    address public constant uniV3Factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
+    uint24 public constant poolFeeDefault = 3000;
 
     function consult(
         address tokenIn,
@@ -19,13 +21,7 @@ contract TNGBLV3Oracle is ITNGBLV3Oracle {
     ) external view override returns (uint256 amountOut) {
         address _pool = _fetchPool(tokenIn, tokenOut, poolFeeDefault);
         require(_pool != address(0), "pool doesn't exist");
-        amountOut = _estimateAmountOut(
-            tokenIn,
-            tokenOut,
-            _pool,
-            amountIn,
-            secondsAgo
-        );
+        amountOut = _estimateAmountOut(tokenIn, tokenOut, _pool, amountIn, secondsAgo);
     }
 
     function consultWithFee(
@@ -38,13 +34,7 @@ contract TNGBLV3Oracle is ITNGBLV3Oracle {
         address _pool = _fetchPool(tokenIn, tokenOut, fee);
         require(_pool != address(0), "pool doesn't exist");
 
-        amountOut = _estimateAmountOut(
-            tokenIn,
-            tokenOut,
-            _pool,
-            amountIn,
-            secondsAgo
-        );
+        amountOut = _estimateAmountOut(tokenIn, tokenOut, _pool, amountIn, secondsAgo);
     }
 
     function _fetchPool(
@@ -69,9 +59,7 @@ contract TNGBLV3Oracle is ITNGBLV3Oracle {
 
         // int56 since tick * time = int24 * uint32
         // 56 = 24 + 32
-        (int56[] memory tickCumulatives, ) = IUniswapV3Pool(pool).observe(
-            secondsAgos
-        );
+        (int56[] memory tickCumulatives, ) = IUniswapV3Pool(pool).observe(secondsAgos);
 
         int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
 
@@ -87,17 +75,10 @@ contract TNGBLV3Oracle is ITNGBLV3Oracle {
         so if tickCumulativeDelta < 0 and division has remainder, then round
         down
         */
-        if (
-            tickCumulativesDelta < 0 && (tickCumulativesDelta % secondsAgo != 0)
-        ) {
+        if (tickCumulativesDelta < 0 && (tickCumulativesDelta % secondsAgo != 0)) {
             tick--;
         }
 
-        amountOut = OracleLibrary.getQuoteAtTick(
-            tick,
-            amountIn,
-            tokenIn,
-            tokenOut
-        );
+        amountOut = OracleLibrary.getQuoteAtTick(tick, amountIn, tokenIn, tokenOut);
     }
 }

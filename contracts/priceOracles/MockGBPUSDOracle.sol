@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-pragma solidity 0.8.7;
+pragma solidity ^0.8.19;
 
 /**
  * @title The Owned contract
@@ -60,16 +60,8 @@ interface AggregatorInterface {
 
     function getTimestamp(uint256 roundId) external view returns (uint256);
 
-    event AnswerUpdated(
-        int256 indexed current,
-        uint256 indexed roundId,
-        uint256 updatedAt
-    );
-    event NewRound(
-        uint256 indexed roundId,
-        address indexed startedBy,
-        uint256 startedAt
-    );
+    event AnswerUpdated(int256 indexed current, uint256 indexed roundId, uint256 updatedAt);
+    event NewRound(uint256 indexed roundId, address indexed startedBy, uint256 startedAt);
 }
 
 interface AggregatorV3Interface {
@@ -82,7 +74,9 @@ interface AggregatorV3Interface {
     // getRoundData and latestRoundData should both raise "No data present"
     // if they do not have data to report, instead of returning unset values
     // which could be misinterpreted as actual reported values.
-    function getRoundData(uint80 _roundId)
+    function getRoundData(
+        uint80 _roundId
+    )
         external
         view
         returns (
@@ -105,10 +99,7 @@ interface AggregatorV3Interface {
         );
 }
 
-interface AggregatorV2V3Interface is
-    AggregatorInterface,
-    AggregatorV3Interface
-{}
+interface AggregatorV2V3Interface is AggregatorInterface, AggregatorV3Interface {}
 
 /**
  * @title External Access Controlled Aggregator Proxy
@@ -192,21 +183,11 @@ contract MockGBPUSDOracle is AggregatorV2V3Interface, Owned {
         return "GBP/USD";
     }
 
-    function getAnswer(uint256 roundId)
-        external
-        view
-        override
-        returns (int256)
-    {
+    function getAnswer(uint256 roundId) external view override returns (int256) {
         return 0;
     }
 
-    function getTimestamp(uint256 roundId)
-        external
-        view
-        override
-        returns (uint256)
-    {
+    function getTimestamp(uint256 roundId) external view override returns (uint256) {
         return 0;
     }
 
@@ -218,7 +199,9 @@ contract MockGBPUSDOracle is AggregatorV2V3Interface, Owned {
         return 0;
     }
 
-    function getRoundData(uint80 _roundId)
+    function getRoundData(
+        uint80 _roundId
+    )
         external
         view
         override
