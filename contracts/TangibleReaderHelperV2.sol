@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title TangibleReaderHelper
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract allows for batch reads to several Tangible contracts for various purposes.
  */
 contract TangibleReaderHelperV2 {

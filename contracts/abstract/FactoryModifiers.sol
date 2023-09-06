@@ -8,7 +8,7 @@ import "../interfaces/ITangibleNFT.sol";
 
 /**
  * @title FactoryModifiers
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract offers permissioned modifiers for contracts that have factory permissioned functions.
  */
 abstract contract FactoryModifiers {

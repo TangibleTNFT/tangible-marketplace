@@ -5,10 +5,12 @@ interface IRentManager {
     struct RentInfo {
         uint256 depositAmount;
         uint256 claimedAmount;
+        uint256 claimedAmountTotal;
         uint256 unclaimedAmount;
         uint256 depositTime;
         uint256 endTime;
         address rentToken;
+        bool distributionRunning;
     }
 
     function updateDepositor(address _newDepositor) external;
@@ -17,12 +19,14 @@ interface IRentManager {
         uint256 tokenId,
         address tokenAddress,
         uint256 amount,
-        uint256 endTime
+        uint256 month,
+        uint256 endTime,
+        bool skipBackpayment
     ) external;
 
     function claimableRentForToken(uint256 tokenId) external view returns (uint256);
 
-    function claimRentForToken(uint256 tokenId) external;
+    function claimRentForToken(uint256 tokenId) external returns (uint256);
 
     function TNFT_ADDRESS() external view returns (address);
 

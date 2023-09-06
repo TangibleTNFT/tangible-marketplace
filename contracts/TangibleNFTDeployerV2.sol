@@ -7,7 +7,7 @@ import "./abstract/FactoryModifiers.sol";
 
 /**
  * @title TangibleNFTDeployer
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to deploy new TangibleNFT contracts.
  */
 contract TangibleNFTDeployerV2 is ITangibleNFTDeployer, FactoryModifiers {

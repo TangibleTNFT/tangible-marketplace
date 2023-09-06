@@ -5,16 +5,13 @@ pragma solidity ^0.8.19;
 interface ITNFTMetadata {
     /// @dev FeatureInfo struct object for storing features metadata.
     struct FeatureInfo {
-        uint256 feature;
-        string description;
         uint256[] tnftTypes;
-        uint256[] indexInTypes;
         bool added;
+        string description;
     }
 
     /// @dev TNFTType struct object for storing tnft-type metadata.
     struct TNFTType {
-        uint256 tnftType;
         bool added;
         bool paysRent;
         string description;
@@ -27,10 +24,7 @@ interface ITNFTMetadata {
     /// @dev Returns a tnft type metadata object given the tnft type.
     function tnftTypes(
         uint256 _tnftType
-    )
-        external
-        view
-        returns (bool added, bool paysRent, string memory description);
+    ) external view returns (bool added, bool paysRent, string memory description);
 
     /// @dev Returns a feature given the tnft type and index in the array where it resides.
     ///      features that are in specific type so that you can't add a type

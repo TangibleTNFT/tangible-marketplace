@@ -6,7 +6,7 @@ import "../abstract/FactoryModifiers.sol";
 
 /**
  * @title CurrencyFeedV2
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This smart contract is used to store ISO codes for countries/currencies and manages price feed oracles for each currency supported.
  * @dev This contract utilizes the International Organization for Standardization (ISO)'s standard for representing global currencies and countries.
  *      country codes: https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes

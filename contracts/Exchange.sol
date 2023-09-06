@@ -11,7 +11,7 @@ import "./exchangeInterfaces/IPearlRouter.sol";
 
 /**
  * @title Exchange
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to exchange Erc20 tokens.
  */
 contract ExchangeV2 is IExchange, FactoryModifiers {
@@ -56,15 +56,17 @@ contract ExchangeV2 is IExchange, FactoryModifiers {
         bool _simpleSwap,
         bool _stable
     ) external onlyFactoryOwner {
+        require(_routes.length == _routesReversed.length, "mismatch");
         bytes memory tokenized = abi.encodePacked(tokenInAddress, tokenOutAddress);
         bytes memory tokenizedReverse = abi.encodePacked(tokenOutAddress, tokenInAddress);
         // set routes
         routers[tokenized] = _router;
         routers[tokenizedReverse] = _router;
         // set paths if any
-        for (uint256 i; i < _routes.length; ) {
-            routePaths[tokenized][i] = _routes[i];
-            routePaths[tokenizedReverse][i] = _routesReversed[i];
+        uint256 length = _routes.length;
+        for (uint256 i; i < length; ) {
+            routePaths[tokenized].push(_routes[i]);
+            routePaths[tokenizedReverse].push(_routesReversed[i]);
             unchecked {
                 ++i;
             }

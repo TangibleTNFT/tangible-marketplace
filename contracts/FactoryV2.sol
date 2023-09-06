@@ -12,11 +12,9 @@ import "./interfaces/ITangibleNFTDeployer.sol";
 import "./interfaces/IPriceOracle.sol";
 import "./interfaces/IOwnable.sol";
 
-import "hardhat/console.sol";
-
 /**
  * @title Factory
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice Central factory contract for the Tangible protocol. Manages contract ownership and metadata for all
  *         peripheral contracts in the ecosystem. Also allows for the creation and management of new category Tangible NFTs.
  */
@@ -76,8 +74,8 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
     /// @notice Mapping of EOA to bool. If true, EOA can create a new category and provide their own products.
     mapping(address => bool) public categoryMinter;
 
-    /// @notice Mapping that defines how many categories(TNFT contracts) approved minter can create and manage.
-    mapping(address => uint256) public numCategoriesToMint;
+    /// @notice Mapping that defines how many categories(TNFT contracts) approved minter can create and manage for given type.
+    mapping(address => mapping(uint256 => uint256)) public numCategoriesToMint;
 
     /// @notice Manager of TNFT contract to approve fingerprints for new categories.
     mapping(ITangibleNFT => address) public fingerprintApprovalManager;
@@ -120,9 +118,15 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
      * @dev Only used in whitelistCategoryMinter().
      * @param minter Address of EOA that will be minting tNft(s).
      * @param approved If approved to mint will be true, otherwise false.
-     * @param amount Amount of tokens minter is allowed to mint.
+     * @param tnftType which category user is allowed to create.
+     * @param amount Amount of categories minter is allowed to create.
      */
-    event WhitelistedCategoryMinter(address indexed minter, bool indexed approved, uint16 amount);
+    event WhitelistedCategoryMinter(
+        address indexed minter,
+        bool indexed approved,
+        uint256 indexed tnftType,
+        uint16 amount
+    );
 
     /**
      * @notice This event is emitted when a token or multiple tokens are minted.
@@ -198,7 +202,7 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
     modifier onlyLabsOrMarketplace() {
         require(
             (tangibleLabs == msg.sender) || (marketplace == msg.sender),
-            "Factory: caller is not the owner nor marketplace"
+            "Factory: caller is not the labs nor marketplace"
         );
         _;
     }
@@ -377,14 +381,15 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
         (uint256 tokenPrice, , ) = priceManager.oracleForCategory(tnft).usdPrice(
             tnft,
             paymentToken,
-            tokenId,
-            0
+            0,
+            tokenId
         );
 
         bool storagePriceFixed = tnft.adjustStorage(tokenId, _years);
         //amount to pay
         uint256 amount;
         uint8 decimals = tnft.storageDecimals();
+
         if (storagePriceFixed) {
             amount =
                 toDecimals(tnft.storagePricePerYear(), decimals, paymentToken.decimals()) *
@@ -392,8 +397,8 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
         } else {
             require(tokenPrice > 0, "Price 0");
             amount =
-                ((tokenPrice * tnft.storagePercentagePricePerYear() * _years) / 100) *
-                (10 ** decimals);
+                (tokenPrice * tnft.storagePercentagePricePerYear() * _years) /
+                (100 * (10 ** decimals));
         }
         return amount;
     }
@@ -541,9 +546,9 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
         uint256 _tnftType
     ) external onlyCategoryMinter returns (ITangibleNFT) {
         if (msg.sender != tangibleLabs) {
-            require(numCategoriesToMint[msg.sender] > 0, "Can't create more");
+            require(numCategoriesToMint[msg.sender][_tnftType] > 0, "Can't create more");
             // reducing approved tnft creations
-            numCategoriesToMint[msg.sender]--;
+            numCategoriesToMint[msg.sender][_tnftType]--;
         }
         require(address(category[name]) == address(0), "CE");
         require(tnftDeployer != address(0), "Deployer zero");
@@ -558,9 +563,11 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
         );
         category[name] = tangibleNFT;
         _tnfts.push(tangibleNFT);
+        categoryOwner[tangibleNFT] = msg.sender;
 
         //for rent management
-        (, bool _rent, ) = ITNFTMetadata(tnftMetadata).tnftTypes(_tnftType);
+        (bool added, bool _rent, ) = ITNFTMetadata(tnftMetadata).tnftTypes(_tnftType);
+        require(added, "tnftType not added");
         if (_rent) {
             IRentManager _rentManager = IRentManagerDeployer(rentManagerDeployer).deployRentManager(
                 address(tangibleNFT)
@@ -573,8 +580,6 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             tangibleNFT,
             IPriceOracle(priceOracle)
         );
-
-        categoryOwner[tangibleNFT] = msg.sender;
         // update what owner owns
         if (msg.sender == _contractOwner) {
             ownedByLabs.push(tangibleNFT);
@@ -624,16 +629,20 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
      * @param minter Address to whitelist.
      * @param approved Status of whitelist. If true, able to mint. Otherwise false.
      * @param amount Amount of tokens the `minter` is allowed to mint.
+     * @param _tnftType categories minter is allowed to create.
      */
     function whitelistCategoryMinter(
         address minter,
         bool approved,
-        uint16 amount
+        uint16 amount,
+        uint256 _tnftType
     ) external onlyOwner {
         require(minter != address(0), "Zero address");
+        (bool added, , ) = ITNFTMetadata(tnftMetadata).tnftTypes(_tnftType);
+        require(added, "tnftType not added");
         categoryMinter[minter] = approved;
-        numCategoriesToMint[minter] = amount;
-        emit WhitelistedCategoryMinter(minter, approved, amount);
+        numCategoriesToMint[minter][_tnftType] = amount;
+        emit WhitelistedCategoryMinter(minter, approved, _tnftType, amount);
     }
 
     /**
@@ -680,7 +689,7 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             require(tnft.storageEndTime(token) + expiryDays * 1 days < block.timestamp);
 
             address ownerTnft = tnft.ownerOf(token);
-            tnft.safeTransferFrom(ownerTnft, _contractOwner, token);
+            tnft.safeTransferFrom(ownerTnft, categoryOwner[tnft], token);
 
             unchecked {
                 ++i;

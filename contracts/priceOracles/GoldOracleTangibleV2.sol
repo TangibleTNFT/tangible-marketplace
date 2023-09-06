@@ -9,7 +9,7 @@ import "../interfaces/ICurrencyFeedV2.sol";
 
 /**
  * @title GoldOracleTangible
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This smart contract is used to manage the stock and pricing for gold products for the gold TNFTs.
  */
 contract GoldOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifiers {
@@ -82,7 +82,7 @@ contract GoldOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifiers 
      * @return Returns USD price per gram, premium fee, and tokization cost.
      */
     function _latestAnswer(uint256 _fingerprint) internal view returns (uint256) {
-        require(goldBars[_fingerprint].grams != 0, "No data for tnft");
+        require(goldBars[_fingerprint].grams != 0, "fingerprint must exist");
         AggregatorV3Interface priceFeed = currencyFeed.currencyPriceFeedsISONum(currencyISONum);
         (, int256 price, , , ) = priceFeed.latestRoundData();
         if (price < 0) {
@@ -101,7 +101,7 @@ contract GoldOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifiers 
      * @return Returns the latest block timestamp.
      */
     function latestTimeStamp(uint256 _fingerprint) external view override returns (uint256) {
-        require(goldBars[_fingerprint].grams != 0, "No data for tnft");
+        require(goldBars[_fingerprint].grams != 0, "fingerprint must exist");
         AggregatorV3Interface priceFeed = currencyFeed.currencyPriceFeedsISONum(currencyISONum);
         (, , , uint256 timeStamp, ) = priceFeed.latestRoundData();
         return timeStamp;

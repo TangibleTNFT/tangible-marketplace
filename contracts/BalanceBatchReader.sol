@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title BalanceBatchReader
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to fetch multiple balances of a single token.
  */
 contract BalanceBatchReader {

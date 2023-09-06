@@ -8,7 +8,7 @@ import "./abstract/FactoryModifiers.sol";
 
 /**
  * @title OnSaleTracker
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract tracks the status of TNFTs listed on the Marketplace
  */
 contract OnSaleTracker is IOnSaleTracker, FactoryModifiers {
@@ -82,7 +82,6 @@ contract OnSaleTracker is IOnSaleTracker, FactoryModifiers {
             tnftSaleMapper[tnft][tokenId] = tsi;
         } else {
             //something is removed from marketplace
-            require(tnft.ownerOf(tokenId) != marketplace, "TM still owner");
             uint256 indexInTokenSale = tnftSaleMapper[tnft][tokenId].indexInCurrentlySelling;
             _removeCurrentlySellingTnft(tnft, indexInTokenSale);
             delete tnftSaleMapper[tnft][tokenId];

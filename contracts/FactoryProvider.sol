@@ -5,7 +5,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 /**
  * @title FactoryProvider
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to store the Factory address.
  */
 contract FactoryProvider is OwnableUpgradeable {

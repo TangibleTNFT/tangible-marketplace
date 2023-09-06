@@ -7,7 +7,7 @@ import "./interfaces/ITNGBLV3Oracle.sol";
 
 /**
  * @title TNGBLV3Oracle
- * @author Tangible.store
+ * @author Veljko Mihailovic
  */
 contract TNGBLV3Oracle is ITNGBLV3Oracle {
     address public constant uniV3Factory = 0x1F98431c8aD98523631AE4a59f267346ea31F984;

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "./interfaces/ITangibleMarketplace.sol";
+import "./interfaces/IRentManager.sol";
 import "./interfaces/IWETH9.sol";
 import "./interfaces/ISellFeeDistributor.sol";
 import "./interfaces/IOwnable.sol";
@@ -19,7 +20,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 /**
  * @title Marketplace
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This smart contract facilitates the buying and selling of Tangible NFTs.
  */
 contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModifiers {
@@ -82,11 +83,25 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
      * @param tokenId TNFT identifier.
      * @param price Price at which the token was purchased.
      */
-    event TnftSold(
+    event TnftBought(
         address indexed buyer,
         address indexed nft,
         uint256 indexed tokenId,
         address seller,
+        uint256 price
+    );
+
+    /**
+     * @notice This event is emitted when a TNFT has been sold from the marketplace.
+     * @param seller Address of seller that was selling
+     * @param nft Address of TangibleNFT contract.
+     * @param tokenId TNFT identifier.
+     * @param price Price at which the token was sold.
+     */
+    event TnftSold(
+        address indexed seller,
+        address indexed nft,
+        uint256 indexed tokenId,
         uint256 price
     );
 
@@ -370,7 +385,7 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         uint256[] memory tokenIds = factory.mint(voucher);
         tokenId = tokenIds[0];
         //pay for storage
-        if (nft.storageRequired()) {
+        if (nft.storageRequired() && !nft.isStorageFeePaid(tokenId)) {
             _payStorage(nft, IERC20Metadata(address(paymentToken)), tokenId, _years);
         }
 
@@ -454,10 +469,21 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
             ISellFeeDistributor(sellFeeAddress).distributeFee(pToken, fee);
             emit MarketplaceFeePaid(address(nft), tokenId, fee);
         }
+        // fetch rent manager
+        IRentManagerExt rentManager = IRentManagerExt(
+            address(IFactory(IFactoryProvider(factoryProvider).factory()).rentManager(nft))
+        );
+        if (address(rentManager) != address(0)) {
+            if (rentManager.claimableRentForToken(tokenId) != 0) {
+                uint256 claimed = rentManager.claimRentForToken(tokenId);
+                IERC20(rentManager.rentInfo(tokenId).rentToken).safeTransfer(_lot.seller, claimed);
+            }
+        }
 
         pToken.safeTransferFrom(buyer, _lot.seller, toPaySeller);
 
-        emit TnftSold(buyer, address(nft), tokenId, _lot.seller, cost);
+        emit TnftSold(_lot.seller, address(nft), tokenId, cost);
+        emit TnftBought(buyer, address(nft), tokenId, _lot.seller, cost);
         delete marketplaceLot[address(nft)][tokenId];
         //update tracker
         _updateTrackerTnft(nft, tokenId, false);

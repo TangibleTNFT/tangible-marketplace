@@ -6,7 +6,7 @@ import "./abstract/FactoryModifiers.sol";
 
 /**
  * @title TangiblePriceManager
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to facilitate the fetching/response of TangibleNFT prices
  */
 contract TangiblePriceManagerV2 is ITangiblePriceManager, FactoryModifiers {

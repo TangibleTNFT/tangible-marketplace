@@ -16,7 +16,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 
 /**
  * @title TangibleNFTV2
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This is the Erc721 contract for the Tangible NFTs. Manages each asset's unique metadata and category.
  */
 contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable, FactoryModifiers {
@@ -50,7 +50,7 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
     /// @notice A mapping from tokenId to bool. If tokenId is set to true, it is in the custody of Tangible.
     mapping(uint256 => bool) public tnftCustody;
 
-    /// @notice A mapping to store TNFT metadata.
+    /// @notice A mapping to store TNFT metadata tokenId -> feature -> feature Info.
     mapping(uint256 => mapping(uint256 => FeatureInfo)) public tokenFeatureAdded;
 
     /// @notice A mapping to store features added per tokenId.
@@ -296,7 +296,10 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
     function setStoragePercentPricePerYear(
         uint16 _storagePercentagePricePerYear
     ) external onlyCategoryOwner(ITangibleNFT(address(this))) {
-        emit StoragePercentagePricePerYearSet(storagePricePerYear, _storagePercentagePricePerYear);
+        emit StoragePercentagePricePerYearSet(
+            storagePercentagePricePerYear,
+            _storagePercentagePricePerYear
+        );
         storagePercentagePricePerYear = _storagePercentagePricePerYear;
     }
 
@@ -365,6 +368,7 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
         uint256 tokenId,
         uint256[] calldata _features
     ) external onlyCategoryOwner(ITangibleNFT(address(this))) {
+        require(_exists(tokenId), "token not minted");
         ITNFTMetadata tnftMetadata = ITNFTMetadata(
             IFactory(IFactoryProvider(factoryProvider).factory()).tnftMetadata()
         );
@@ -407,7 +411,8 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
             tokenFeatures[tokenId][tokenFeatureAdded[tokenId][feature].index] = last;
             //remove from array
             tokenFeatures[tokenId].pop();
-            // delete mapping
+            // delete mapping and update index of the last
+            tokenFeatureAdded[tokenId][last].index = tokenFeatureAdded[tokenId][feature].index;
             delete tokenFeatureAdded[tokenId][feature];
             emit TnftFeature(tokenId, feature, false);
 
@@ -613,7 +618,9 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
             return;
         }
         if (!_isStorageFeePaid(tokenId) && _originalTokenOwners[tokenId] != from) {
-            revert("CT");
+            if (msg.sender != factory) {
+                revert("CT");
+            }
         }
     }
 
@@ -623,6 +630,23 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
      * @return If true, storage has not expired, otherwise false.
      */
     function _isStorageFeePaid(uint256 tokenId) internal view returns (bool) {
+        //logic for no storage
+        if (!_shouldPayStorage()) {
+            return true;
+        }
         return storageEndTime[tokenId] > block.timestamp;
+    }
+
+    function _shouldPayStorage() internal view returns (bool) {
+        if (storageRequired) {
+            if (
+                (storagePriceFixed && storagePricePerYear == 0) ||
+                (!storagePriceFixed && storagePercentagePricePerYear == 0)
+            ) {
+                return false;
+            }
+            return true;
+        }
+        return false;
     }
 }

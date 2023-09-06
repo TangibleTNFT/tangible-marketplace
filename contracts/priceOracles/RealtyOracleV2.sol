@@ -10,7 +10,7 @@ import "../interfaces/IChainlinkRWAOracle.sol";
 
 /**
  * @title RealtyOracleTangibleV2
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This smart contract is used to manage the stock and pricing for Real Estate properties.
  */
 contract RealtyOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifiers {

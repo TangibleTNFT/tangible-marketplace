@@ -10,7 +10,7 @@ import "./interfaces/IExchange.sol";
 
 /**
  * @title SellFeeDistributor
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract collects fees and distributes it to the correct places; Burn or revenuShare. Fees are accrued here and taken from Marketplace transactions.
  */
 contract SellFeeDistributorV2 is ISellFeeDistributor, FactoryModifiers {
@@ -128,7 +128,7 @@ contract SellFeeDistributorV2 is ISellFeeDistributor, FactoryModifiers {
     function _distributeFee(IERC20 _paymentToken, uint256 _feeAmount) internal {
         //take 66.6666% and send to revenueShare
         uint256 amountForRevenue = (_feeAmount * revenuePercent) / FULL_PORTION;
-
+        uint256 amountForBurn = _feeAmount - amountForRevenue;
         if (address(_paymentToken) != address(USDC)) {
             //we need to convert the payment token to usdc
             _paymentToken.approve(address(exchange), amountForRevenue);
@@ -143,8 +143,6 @@ contract SellFeeDistributorV2 is ISellFeeDistributor, FactoryModifiers {
         emit FeeDistributed(revenueShare, amountForRevenue);
 
         //convert 33.334% to tngbl and burn it
-        uint256 amountForBurn = _feeAmount - amountForRevenue;
-
         // exchange usdc for tngbl
         _paymentToken.approve(address(exchange), amountForBurn);
         uint256 tngblToBurn = exchange.exchange(

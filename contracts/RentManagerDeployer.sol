@@ -10,7 +10,7 @@ import "./abstract/FactoryModifiers.sol";
 
 /**
  * @title RentManagerDeployer
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to deploy new RentManager contracts.
  */
 contract RentManagerDeployer is IRentManagerDeployer, FactoryModifiers {

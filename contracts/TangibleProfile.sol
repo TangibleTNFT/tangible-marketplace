@@ -5,7 +5,7 @@ import "./interfaces/ITangibleProfile.sol";
 
 /**
  * @title TangibleNFTDeployer
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to track and manage user profiles from the front end.
  */
 contract TangibleProfile is ITangibleProfile {

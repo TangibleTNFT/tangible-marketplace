@@ -8,7 +8,7 @@ import "./interfaces/IOwnable.sol";
 
 /**
  * @title TNFTMetadata
- * @author Tangible.store
+ * @author Veljko Mihailovic
  * @notice This contract is used to manage TangibleNFT metadata; Specifically Tnft types and features.
  */
 contract TNFTMetadata is FactoryModifiers {
@@ -18,12 +18,10 @@ contract TNFTMetadata is FactoryModifiers {
      * @notice FeatureInfo struct object for storing features metadata.
      * @param description Description of feature
      * @param tnftTypes Tnft Types that exist under this feature or sub-category.
-     * @param indexInTypes Used to track where types of the feature reside in typeFeatures mapped array.
      * @param added If true, feature is supported.
      */
     struct FeatureInfo {
         uint256[] tnftTypes;
-        uint256[] indexInTypes;
         bool added;
         string description;
     }
@@ -65,7 +63,7 @@ contract TNFTMetadata is FactoryModifiers {
     mapping(uint256 => mapping(uint256 => bool)) public featureInType;
 
     /// @notice Stores the index where a feature(key) resides in featureList.
-    mapping(uint256 => uint256) private _featureIndexInList;
+    mapping(uint256 => uint256) public featureIndexInList;
 
     // ~ Events ~
 
@@ -139,7 +137,7 @@ contract TNFTMetadata is FactoryModifiers {
             featureInfo[item].added = true; // added
             featureInfo[item].description = _featureDescriptions[i]; // set description
             featureList.push(item); // add to featureList
-            _featureIndexInList[item] = featureList.length - 1; // update mapping for removing
+            featureIndexInList[item] = featureList.length - 1; // update mapping for removing
 
             emit FeatureAdded(item, _featureDescriptions[i]);
 
@@ -185,11 +183,17 @@ contract TNFTMetadata is FactoryModifiers {
             require(featureInfo[featureItem].added, "Add first!");
 
             // removing feature from types
-            uint256 indexArrayLength = featureInfo[featureItem].indexInTypes.length;
+            uint256 indexArrayLength = featureInfo[featureItem].tnftTypes.length;
             for (uint256 j; j < indexArrayLength; ) {
                 uint256 typeItem = featureInfo[featureItem].tnftTypes[j];
                 delete featureInType[typeItem][featureItem];
-                _removeFromType(typeItem, featureInfo[featureItem].indexInTypes[j]);
+                // remove from typeFeatures
+                uint256 _index = _findElementIntypeFeatures(typeItem, featureItem);
+                require(_index != type(uint256).max);
+                typeFeatures[typeItem][_index] = typeFeatures[typeItem][
+                    typeFeatures[typeItem].length - 1
+                ];
+                typeFeatures[typeItem].pop();
                 emit FeatureRemovedFromTnftType(typeItem, featureItem);
 
                 unchecked {
@@ -198,10 +202,11 @@ contract TNFTMetadata is FactoryModifiers {
             }
 
             // remove from array of added
-            uint256 index = _featureIndexInList[featureItem];
-            delete _featureIndexInList[featureItem];
+            uint256 index = featureIndexInList[featureItem];
+            delete featureIndexInList[featureItem];
 
             featureList[index] = featureList[featureList.length - 1]; // move last to index of removing
+            featureIndexInList[featureList[featureList.length - 1]] = index;
             featureList.pop(); // pop last element
             delete featureInfo[featureItem]; // delete from featureInfo mapping
 
@@ -211,6 +216,19 @@ contract TNFTMetadata is FactoryModifiers {
                 ++i;
             }
         }
+    }
+
+    function _findElementIntypeFeatures(
+        uint256 _type,
+        uint256 _feature
+    ) internal view returns (uint256) {
+        for (uint256 i; i < typeFeatures[_type].length; ) {
+            if (typeFeatures[_type][i] == _feature) return i;
+            unchecked {
+                ++i;
+            }
+        }
+        return type(uint256).max;
     }
 
     /**
@@ -252,7 +270,6 @@ contract TNFTMetadata is FactoryModifiers {
 
             typeFeatures[_tnftType].push(item);
             featureInfo[item].tnftTypes.push(_tnftType);
-            featureInfo[item].indexInTypes.push(typeFeatures[_tnftType].length - 1);
             featureInType[_tnftType][item] = true;
 
             emit FeatureAddedToTnftType(_tnftType, item);
@@ -278,6 +295,10 @@ contract TNFTMetadata is FactoryModifiers {
      */
     function getTNFTTypes() external view returns (uint256[] memory) {
         return tnftTypesArray;
+    }
+
+    function getFeatureInfo(uint256 feature) external view returns (FeatureInfo memory) {
+        return featureInfo[feature];
     }
 
     /**
