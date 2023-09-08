@@ -211,6 +211,7 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
             (msg.sender == marketplaceLot[address(nft)][tokenId].seller)
         ) {
             marketplaceLot[address(nft)][tokenId].price = price;
+            marketplaceLot[address(nft)][tokenId].paymentToken = paymentToken;
         } else {
             //here we don't need to check, if not approved trx will fail
             nft.safeTransferFrom(msg.sender, address(this), tokenId, abi.encode(price));
