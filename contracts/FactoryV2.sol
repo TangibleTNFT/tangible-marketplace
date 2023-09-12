@@ -23,15 +23,6 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
 
     // ~ State Variables ~
 
-    /// @notice Signature hash for a custom "CLAIMER" role.
-    bytes32 public constant CLAIMER_ROLE = keccak256("CLAIMER");
-
-    /// @notice Signature hash for a custom "DEPOSITOR" role.
-    bytes32 public constant DEPOSITOR_ROLE = keccak256("DEPOSITOR");
-
-    /// @notice Signature hash for a custom "SHARE_MANAGER" role.
-    bytes32 public constant SHARE_MANAGER_ROLE = keccak256("SHARE_MANAGER");
-
     /// @notice This variable stores the address of the contract owner.
     address internal _contractOwner;
 
@@ -101,6 +92,12 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
 
     /// @notice Array of TNFTs owned by Tangible.
     ITangibleNFT[] public ownedByLabs;
+
+    /// @notice Baskets manager address
+    address public basketsManager;
+
+        /// @notice Currency feed address
+    address public currencyFeed;
 
     // ~ Events ~
 
@@ -218,6 +215,8 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
      * @param PRICE_MANAGER Price Manager contract (4)
      * @param TNFT_META TangibleNFTMetadata contract (5)
      * @param REVENUE_SHARE TangibleRevenueShare contract (6)
+     * @param BASKETS_DEPLOYER Baskets deployer contract (7)
+     * @param CURRENCY_FEED Currency feed contract (8)
      */
     enum FACT_ADDRESSES {
         MARKETPLACE,
@@ -226,7 +225,9 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
         LABS,
         PRICE_MANAGER,
         TNFT_META,
-        REVENUE_SHARE
+        REVENUE_SHARE,
+        BASKETS_MANAGER,
+        CURRENCY_FEED
     }
 
     // ~ Constructor ~
@@ -332,6 +333,14 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             // 6
             old = revenueShare;
             revenueShare = _contractAddress;
+        } else if (_contractId == FACT_ADDRESSES.BASKETS_MANAGER) {
+            // 7
+            old = basketsManager;
+            basketsManager = _contractAddress;
+        } else if (_contractId == FACT_ADDRESSES.CURRENCY_FEED) {
+            // 8
+            old = currencyFeed;
+            currencyFeed = _contractAddress;
         } else {
             revert("Incorrect _contractId input");
         }

@@ -56,6 +56,12 @@ interface IFactory is IVoucher {
     /// @dev RentManager contract for specific TNFT.
     function rentManager(ITangibleNFT) external view returns (IRentManager);
 
+    /// @notice Baskets manager address
+    function basketsManager() external view returns (address);
+
+    /// @notice Currency feed address
+    function currencyFeed() external view returns (address);
+
     /// @dev Returns if the `nft` is a whitelisted category. If true, tnft's are whitelisted buyers only.
     function onlyWhitelistedForUnmintedCategory(ITangibleNFT nft) external view returns (bool);
 
