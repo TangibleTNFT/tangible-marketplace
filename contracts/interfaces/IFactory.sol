@@ -82,4 +82,7 @@ interface IFactory is IVoucher {
 
     /// @dev Returns the address of the TangibleNFTMetadata contract.
     function tnftMetadata() external view returns (address);
+
+    /// @dev Returns the address to be used while sending payments to categoryOwner (buyUnminted,storage).
+    function categoryOwnerWallet(ITangibleNFT nft) external view returns (address);
 }

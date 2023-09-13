@@ -74,6 +74,9 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
     /// @notice Mapping to map the owner EOA of a specified category for a TNFT contract.
     mapping(ITangibleNFT => address) public categoryOwner;
 
+    /// @notice Mapping to map the payment wallet of category owner.
+    mapping(address => address) public categoryOwnerPaymentAddress;
+
     /// @notice Maps category string to TNFT contract address.
     mapping(string => ITangibleNFT) public category;
 
@@ -96,7 +99,7 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
     /// @notice Baskets manager address
     address public basketsManager;
 
-        /// @notice Currency feed address
+    /// @notice Currency feed address
     address public currencyFeed;
 
     // ~ Events ~
@@ -139,6 +142,13 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
      * @param approved If true, token is accepted as payment otherwise false.
      */
     event PaymentToken(address indexed token, bool approved);
+
+    /**
+     * @notice This event is emitted when the walet for payment is changed.
+     * @param owner Address owner which want to change his wallet for payments.
+     * @param wallet Address of the wallet to use
+     */
+    event WalletChanged(address indexed owner, address wallet);
 
     /**
      * @notice This event is emitted when a new category of tNFTs is created and deployed.
@@ -246,6 +256,7 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
         _contractOwner = msg.sender;
         tangibleLabs = _tangibleLabs;
         categoryMinter[_tangibleLabs] = true;
+        categoryOwnerPaymentAddress[_tangibleLabs] = _tangibleLabs;
 
         emit ContractUpdated(uint256(FACT_ADDRESSES.LABS), address(0), _tangibleLabs);
         emit OwnershipPushed(address(0), _contractOwner);
@@ -270,6 +281,16 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
     function configurePaymentToken(IERC20 token, bool value) external onlyOwner {
         paymentTokens[token] = value;
         emit PaymentToken(address(token), value);
+    }
+
+    /**
+     * @notice This function is used to change wallet address, where payments will go.
+     * @param wallet address to where payment will go for msg.sender.
+     */
+    function configurePaymentWallet(address wallet) external {
+        require(wallet != address(0), "no zero address");
+        categoryOwnerPaymentAddress[msg.sender] = wallet;
+        emit WalletChanged(msg.sender, wallet);
     }
 
     /**
@@ -321,6 +342,9 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             categoryMinter[tangibleLabs] = false;
             categoryMinter[_contractAddress] = true;
             tangibleLabs = _contractAddress;
+            // set payment wallet
+            categoryOwnerPaymentAddress[_contractAddress] = categoryOwnerPaymentAddress[old];
+            delete categoryOwnerPaymentAddress[old];
         } else if (_contractId == FACT_ADDRESSES.PRICE_MANAGER) {
             // 4
             old = address(priceManager);
@@ -353,6 +377,27 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
      */
     function getCategories() external view returns (ITangibleNFT[] memory) {
         return _tnfts;
+    }
+
+    /**
+     * @notice This view function is used to return payment wallet that should be used for buyUnminted and storage payments.
+     * @return wallet address to be used as payment.
+     */
+    function categoryOwnerWallet(ITangibleNFT nft) external view returns (address wallet) {
+        return _categoryOwnerWallet(nft);
+    }
+
+    /**
+     * @notice This internal view function is used to return payment wallet that should be used for
+     * buyUnminted and storage payments.
+     * @return wallet address to be used as payment.
+     */
+    function _categoryOwnerWallet(ITangibleNFT nft) internal view returns (address wallet) {
+        address owner = categoryOwner[nft];
+        wallet = categoryOwnerPaymentAddress[owner];
+        if (wallet == address(0)) {
+            wallet = owner;
+        }
     }
 
     /**
@@ -452,7 +497,11 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             mintCount = voucher.mintCount;
         } else if (marketplace == msg.sender) {
             require(voucher.buyer != address(0), "BMNBZ");
-            require(voucher.vendor == categoryOwner[voucher.token], "MFSEO");
+            require(
+                voucher.vendor == categoryOwner[voucher.token] ||
+                    voucher.vendor == _categoryOwnerWallet(voucher.token),
+                "MFSEO"
+            );
             //houses can't be bought by marketplace unless
             if (_paysRent(voucher.token)) {
                 require(onlyWhitelistedForUnmintedCategory[voucher.token], "OWL");

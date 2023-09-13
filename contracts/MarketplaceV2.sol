@@ -335,7 +335,7 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         //we take in default USD token
         IERC20(address(paymentToken)).safeTransferFrom(
             msg.sender,
-            factory.categoryOwner(nft),
+            factory.categoryOwnerWallet(nft),
             amount
         );
         emit StorageFeePaid(msg.sender, address(nft), tokenId, address(paymentToken), amount);
@@ -378,7 +378,7 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
             token: nft,
             mintCount: 1,
             price: 0,
-            vendor: factory.categoryOwner(nft),
+            vendor: factory.categoryOwnerWallet(nft),
             buyer: msg.sender,
             fingerprint: _fingerprint,
             sendToVendor: false

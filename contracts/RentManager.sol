@@ -29,7 +29,7 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
  *
  * The contract keeps track of the deposited, claimed, and unclaimed amounts for each token.
  * Also it takes care of backpayment so if there was no rent deposited for 10 days after previous rent vest expired,
- * It starts vesting from the moment the old vest stopped. 
+ * It starts vesting from the moment the old vest stopped.
  * With pause and claim back, you reset end time, take what is left, claim what is for the owner.
  *
  * The contract also provides a function to calculate the claimable rent for a token.
