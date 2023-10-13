@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/IERC721Upgradeable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721MetadataUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/IERC721EnumerableUpgradeable.sol";
 
 /// @title ITangibleNFT interface defines the interface of the TangibleNFT contract.
 
-interface ITangibleNFT is IERC721, IERC721Metadata {
+interface ITangibleNFT is IERC721Upgradeable, IERC721MetadataUpgradeable {
     /// @notice This struct defines a Feature object
     /// @param feature Feature identifier.
     /// @param index Index in `tokenFeatures` array.
@@ -68,6 +69,12 @@ interface ITangibleNFT is IERC721, IERC721Metadata {
 
     /// @dev Returns the type identifier for this category.
     function tnftType() external view returns (uint256);
+
+    function fingerprintTokens(uint256 fingerprint, uint256 index) external view returns (uint256);
+
+    function getFingerprintTokens(uint256 fingerprint) external view returns (uint256[] memory);
+
+    function getFingerprintTokensSize(uint256 fingerprint) external view returns (uint256);
 }
 
 /// @title ITangibleNFTExt interface defines the extended interface of the TangibleNFT contract.

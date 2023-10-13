@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./IFactory.sol";
@@ -13,6 +13,7 @@ interface ITangibleMarketplace is IVoucher {
      * @param sellder Original owner address.
      * @param price Selling price for token.
      * @param minted If true, minted for buyUnminted.
+     * @param designatedBuyer If not zero address, only this address can buy.
      */
     struct Lot {
         ITangibleNFT nft;
@@ -20,6 +21,7 @@ interface ITangibleMarketplace is IVoucher {
         uint256 tokenId;
         address seller;
         uint256 price;
+        address designatedBuyer;
     }
 
     /// @dev The function allows anyone to put on sale the TangibleNFTs they own
@@ -28,7 +30,8 @@ interface ITangibleMarketplace is IVoucher {
         ITangibleNFT nft,
         IERC20 paymentToken,
         uint256[] calldata tokenIds,
-        uint256[] calldata price
+        uint256[] calldata price,
+        address designatedBuyer
     ) external;
 
     /// @dev The function allows the owner of the minted TangibleNFT items to remove them from the Marketplace
@@ -56,6 +59,12 @@ interface ITangibleMarketplace is IVoucher {
         IERC20Metadata paymentToken,
         uint256 tokenId,
         uint256 _years
+    ) external;
+
+    function setDesignatedBuyer(
+        ITangibleNFT nft,
+        uint256 tokenId,
+        address designatedBuyer
     ) external;
 }
 

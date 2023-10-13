@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "../interfaces/IPriceOracle.sol";
 import "../abstract/FactoryModifiers.sol";
@@ -32,10 +32,10 @@ contract GoldOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifiers 
     mapping(uint256 => GoldBar) public goldBars;
 
     /// @notice Grams per ounce of gold.
-    uint256 public unz = 31_1034768; // 7 decimals 31.1034768gr
+    uint256 public constant unz = 31_1034768; // 7 decimals 31.1034768gr
 
     /// @notice ISO code for XAU (gold)
-    uint16 public currencyISONum = 959;
+    uint16 public constant currencyISONum = 959;
 
     // ~ Events ~
 
@@ -54,17 +54,20 @@ contract GoldOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifiers 
      */
     event GoldBarStockChanged(uint256 fingerprint, uint256 oldStock, uint256 newStock);
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
 
     /**
      * @notice This initializes the GoldOracleTangible contract.
-     * @param _factoryProvider FactoryProvider contract address.
+     * @param _factory  Factory contract address.
      * @param _currencyFeed Address of price feed oracle.
      */
-    constructor(
-        address _factoryProvider,
-        address _currencyFeed
-    ) FactoryModifiers(_factoryProvider) {
+    function initialize(address _factory, address _currencyFeed) external initializer {
+        __FactoryModifiers_init(_factory);
         require(_currencyFeed != address(0), "Empty address");
         currencyFeed = ICurrencyFeedV2(_currencyFeed);
     }
@@ -185,6 +188,75 @@ contract GoldOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifiers 
         override
         returns (uint256 weSellAt, uint256 weSellAtStock, uint256 tokenizationCost)
     {
+        return _usdPrice(_nft, _paymentUSDToken, _fingerprint, _tokenId);
+    }
+
+    /**
+     * @notice This method returns the USD prices data of a specified gold bars
+     * @param _nft TangibleNFT contract reference.
+     * @param _paymentUSDToken Token being used as payment.
+     * @param _fingerprints Product identifiers.
+     * @param _tokenIds Token identifiers.
+     * @return weSellAt -> Prices of item in oracle, market price for corresponding _fingerprints or tokenIds.
+     * @return weSellAtStock -> Stock of the item. (Quantity) for corresponding _fingerprints or tokenIds.
+     * @return tokenizationCost -> Tokenization costs for tokenizing asset. For gold, is 0.
+     */
+    function usdPrices(
+        ITangibleNFT _nft,
+        IERC20Metadata _paymentUSDToken,
+        uint256[] calldata _fingerprints,
+        uint256[] calldata _tokenIds
+    )
+        external
+        view
+        override
+        returns (
+            uint256[] memory weSellAt,
+            uint256[] memory weSellAtStock,
+            uint256[] memory tokenizationCost
+        )
+    {
+        bool useFingerprint = _fingerprints.length == 0 ? false : true;
+        uint256 length = useFingerprint ? _fingerprints.length : _tokenIds.length;
+        weSellAt = new uint256[](length);
+        weSellAtStock = new uint256[](length);
+        tokenizationCost = new uint256[](length);
+        if (useFingerprint) {
+            for (uint256 i; i < length; ) {
+                (weSellAt[i], weSellAtStock[i], tokenizationCost[i]) = _usdPrice(
+                    _nft,
+                    _paymentUSDToken,
+                    _fingerprints[i],
+                    0
+                );
+                unchecked {
+                    ++i;
+                }
+            }
+        } else {
+            for (uint256 i; i < length; ) {
+                (weSellAt[i], weSellAtStock[i], tokenizationCost[i]) = _usdPrice(
+                    _nft,
+                    _paymentUSDToken,
+                    0,
+                    _tokenIds[i]
+                );
+                unchecked {
+                    ++i;
+                }
+            }
+        }
+    }
+
+    /**
+     * @notice This internal method returns the USD price data of a specified gold bar
+     */
+    function _usdPrice(
+        ITangibleNFT _nft,
+        IERC20Metadata _paymentUSDToken,
+        uint256 _fingerprint,
+        uint256 _tokenId
+    ) internal view returns (uint256 weSellAt, uint256 weSellAtStock, uint256 tokenizationCost) {
         require(
             (address(_nft) != address(0) && _tokenId != 0) || (_fingerprint != 0),
             "Must provide fingerprint or tokenId"

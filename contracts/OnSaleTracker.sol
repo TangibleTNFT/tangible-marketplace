@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./interfaces/IOnSaleTracker.sol";
-import "./interfaces/IFactoryProvider.sol";
-import "./interfaces/IOwnable.sol";
+
 import "./abstract/FactoryModifiers.sol";
 
 /**
@@ -44,11 +43,18 @@ contract OnSaleTracker is IOnSaleTracker, FactoryModifiers {
     /// @notice Stores the address of the Marketplace contract.
     address public marketplace;
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
     /**
      * @notice Initialize OnSaleTracker
      */
-    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
+    function initialize(address _factory) external initializer {
+        __FactoryModifiers_init(_factory);
+    }
 
     // ~ Functions ~
 

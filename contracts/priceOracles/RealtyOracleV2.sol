@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "../abstract/PriceConverter.sol";
 import "../interfaces/IPriceOracle.sol";
-import "../interfaces/IOwnable.sol";
 import "../abstract/FactoryModifiers.sol";
 import "../interfaces/ICurrencyFeedV2.sol";
 import "../interfaces/IChainlinkRWAOracle.sol";
+import "../interfaces/IRWAPriceNotificationDispatcher.sol";
 
 /**
  * @title RealtyOracleTangibleV2
@@ -17,7 +17,7 @@ contract RealtyOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifier
     // ~ State Variables ~
 
     /// @notice Version of oracle interface this contract uses.
-    uint256 public version = 4;
+    uint256 public version;
 
     /// @notice Currency Feed contract reference.
     ICurrencyFeedV2 public currencyFeed;
@@ -25,31 +25,38 @@ contract RealtyOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifier
     /// @notice Tangible Oracle contract reference.
     IChainlinkRWAOracle public chainlinkRWAOracle;
 
-    /// @notice Stores Factory contract address.
-    address public factory;
-
     /// @notice Holds description of oracle.
     string public constant description = "Real estate Oracle";
 
-    // ~ Constructor ~
+    /// @notice Holds the address of the notification dispatcher.
+    IRWAPriceNotificationDispatcher public notificationDispatcher;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
 
     /**
      * @notice Initializes RealtyOracleTangibleV2.
-     * @param _factoryProvider FactoryProvider contract address.
+     * @param _factory  Factory contract address.
      * @param _currencyFeed Currency Feed contract address.
      * @param _chainlinkRWAOracle Chainlink Tangible Oracle address.
      */
-    constructor(
-        address _factoryProvider,
+    function initialize(
+        address _factory,
         address _currencyFeed,
         address _chainlinkRWAOracle
-    ) FactoryModifiers(_factoryProvider) {
+    ) external initializer {
         require(
             _currencyFeed != address(0) && _chainlinkRWAOracle != address(0),
             "one address is zero"
         );
+        __FactoryModifiers_init(_factory);
         currencyFeed = ICurrencyFeedV2(_currencyFeed);
         chainlinkRWAOracle = IChainlinkRWAOracle(_chainlinkRWAOracle);
+        version = 4;
     }
 
     // ~ Functions ~
@@ -99,6 +106,75 @@ contract RealtyOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifier
         override
         returns (uint256 weSellAt, uint256 weSellAtStock, uint256 tokenizationCost)
     {
+        return _usdPrice(_nft, _paymentUSDToken, _fingerprint, _tokenId);
+    }
+
+    /**
+     * @notice This method returns the USD prices data of a specified real estate assets.
+     * @param _nft TangibleNFT contract reference.
+     * @param _paymentUSDToken Token being used as payment.
+     * @param _fingerprints Product identifiers.
+     * @param _tokenIds Token identifiers.
+     * @return weSellAt -> Prices of item in oracle, market price for corresponding _fingerprints or tokenIds.
+     * @return weSellAtStock -> Stock of the item. (Quantity) for corresponding _fingerprints or tokenIds.
+     * @return tokenizationCost -> Tokenization costs for tokenizing asset for corresponding _fingerprints or tokenIds.
+     */
+    function usdPrices(
+        ITangibleNFT _nft,
+        IERC20Metadata _paymentUSDToken,
+        uint256[] calldata _fingerprints,
+        uint256[] calldata _tokenIds
+    )
+        external
+        view
+        override
+        returns (
+            uint256[] memory weSellAt,
+            uint256[] memory weSellAtStock,
+            uint256[] memory tokenizationCost
+        )
+    {
+        bool useFingerprint = _fingerprints.length == 0 ? false : true;
+        uint256 length = useFingerprint ? _fingerprints.length : _tokenIds.length;
+        weSellAt = new uint256[](length);
+        weSellAtStock = new uint256[](length);
+        tokenizationCost = new uint256[](length);
+        if (useFingerprint) {
+            for (uint256 i; i < length; ) {
+                (weSellAt[i], weSellAtStock[i], tokenizationCost[i]) = _usdPrice(
+                    _nft,
+                    _paymentUSDToken,
+                    _fingerprints[i],
+                    0
+                );
+                unchecked {
+                    ++i;
+                }
+            }
+        } else {
+            for (uint256 i; i < length; ) {
+                (weSellAt[i], weSellAtStock[i], tokenizationCost[i]) = _usdPrice(
+                    _nft,
+                    _paymentUSDToken,
+                    0,
+                    _tokenIds[i]
+                );
+                unchecked {
+                    ++i;
+                }
+            }
+        }
+    }
+
+    /**
+     * @notice This method returns the USD price data of a specified real estate asset.
+     */
+    function _usdPrice(
+        ITangibleNFT _nft,
+        IERC20Metadata _paymentUSDToken,
+        uint256 _fingerprint,
+        uint256 _tokenId
+    ) internal view returns (uint256 weSellAt, uint256 weSellAtStock, uint256 tokenizationCost) {
         require(
             (address(_nft) != address(0) && _tokenId != 0) || (_fingerprint != 0),
             "Must provide fingerpeint or tokenId"
@@ -108,7 +184,10 @@ contract RealtyOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifier
         }
         uint8 localDecimals = chainlinkRWAOracle.getDecimals();
 
-        require(_fingerprint != 0, "fingerprint must exist");
+        require(
+            _fingerprint != 0 && chainlinkRWAOracle.fingerprintExists(_fingerprint),
+            "fingerprint must exist"
+        );
         IChainlinkRWAOracle.Data memory fingData = chainlinkRWAOracle.fingerprintData(_fingerprint);
 
         tokenizationCost = toDecimals(
@@ -140,6 +219,14 @@ contract RealtyOracleTangibleV2 is IPriceOracle, PriceConverter, FactoryModifier
      */
     function setChainlinkOracle(address _chainlinkRWAOracle) external onlyTangibleLabs {
         chainlinkRWAOracle = IChainlinkRWAOracle(_chainlinkRWAOracle);
+    }
+
+    /**
+     * @notice This is a restricted function for updating the address of `notificationDispatcher`.
+     * @param _notificationDispatcher New address to store in `notificationDispatcher`.
+     */
+    function setNotificationDispatcher(address _notificationDispatcher) external onlyTangibleLabs {
+        notificationDispatcher = IRWAPriceNotificationDispatcher(_notificationDispatcher);
     }
 
     /**

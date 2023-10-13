@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./interfaces/ITangiblePriceManager.sol";
 import "./abstract/FactoryModifiers.sol";
@@ -20,11 +20,18 @@ contract TangiblePriceManagerV2 is ITangiblePriceManager, FactoryModifiers {
     /// @notice This event is emitted when the `oracleForCategory` variable is updated.
     event CategoryPriceOracleAdded(address indexed category, address indexed priceOracle);
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /**
      * @notice Initialized TangiblePriceManager.
-     * @param _factoryProvider Factory provider contract address.
+     * @param _factory Factory provider contract address.
      */
-    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
+    function initialize(address _factory) external initializer {
+        __FactoryModifiers_init(_factory);
+    }
 
     /**
      * @notice The function is used to set oracle contracts in the `oracleForCategory` mapping.
@@ -64,11 +71,35 @@ contract TangiblePriceManagerV2 is ITangiblePriceManager, FactoryModifiers {
             uint256[] memory tokenizationCost
         )
     {
-        (weSellAt, weSellAtStock, tokenizationCost) = _itemBatchPrices(
+        uint256[] memory empty = new uint[](0);
+        (weSellAt, weSellAtStock, tokenizationCost) = oracleForCategory[nft].usdPrices(
             nft,
             paymentUSDToken,
             fingerprints,
-            true
+            empty
+        );
+    }
+
+    /**
+     *
+     * @notice This function fetches pricing data for specific product.
+     * @param nft TangibleNFT contract reference.
+     * @param paymentUSDToken Token being used as payment.
+     * @param fingerprint product fingerprint.
+     * @return weSellAt -> Price of item in oracle, market price.
+     * @return weSellAtStock -> Stock of the item.
+     * @return tokenizationCost -> Tokenization costs for tokenizing asset.
+     */
+    function itemPriceFingerprint(
+        ITangibleNFT nft,
+        IERC20Metadata paymentUSDToken,
+        uint256 fingerprint
+    ) external view returns (uint256 weSellAt, uint256 weSellAtStock, uint256 tokenizationCost) {
+        (weSellAt, weSellAtStock, tokenizationCost) = oracleForCategory[nft].usdPrice(
+            nft,
+            paymentUSDToken,
+            fingerprint,
+            0
         );
     }
 
@@ -94,58 +125,35 @@ contract TangiblePriceManagerV2 is ITangiblePriceManager, FactoryModifiers {
             uint256[] memory tokenizationCost
         )
     {
-        (weSellAt, weSellAtStock, tokenizationCost) = _itemBatchPrices(
+        uint256[] memory empty = new uint[](0);
+        (weSellAt, weSellAtStock, tokenizationCost) = oracleForCategory[nft].usdPrices(
             nft,
             paymentUSDToken,
-            tokenIds,
-            false
+            empty,
+            tokenIds
         );
     }
 
     /**
-     * @notice This internal function fetches pricing data for an array of tokens or products from the designated oracle.
+     *
+     * @notice This function fetches USD pricing data for tokenId.
      * @param nft TangibleNFT contract reference.
-     * @param paymentUSDToken Token being used as payment -> Will be used to depict USD quote.
-     * @param data Array of token data. Can be tokenIds or fingerprints.
-     * @param fromFingerprints If true, `data` will be an array of fingerprints, otherwise it'll be tokenIds.
-     * @return weSellAtArr -> Array of market prices per item in `data`.
-     * @return weSellAtStockArr -> Array of stock per item in `data`.
-     * @return tokenizationCostArr -> Array of tokenization costs per item in `data`.
+     * @param paymentUSDToken Token being used as payment.
+     * @param tokenId tokenId to fetch the price for.
+     * @return weSellAt -> Price of item in oracle, market price.
+     * @return weSellAtStock -> Stock of the item.
+     * @return tokenizationCost -> Tokenization costs for tokenizing asset.
      */
-    function _itemBatchPrices(
+    function itemPriceTokenId(
         ITangibleNFT nft,
         IERC20Metadata paymentUSDToken,
-        uint256[] calldata data,
-        bool fromFingerprints
-    )
-        internal
-        view
-        returns (
-            uint256[] memory weSellAtArr,
-            uint256[] memory weSellAtStockArr,
-            uint256[] memory tokenizationCostArr
-        )
-    {
-        uint256 length = data.length;
-        weSellAtArr = new uint256[](length);
-        weSellAtStockArr = new uint256[](length);
-        tokenizationCostArr = new uint256[](length);
-        for (uint256 i; i < length; ) {
-            (
-                uint256 _weSellAt,
-                uint256 _weSellAtStock,
-                uint256 _tokenizationCost
-            ) = fromFingerprints
-                    ? oracleForCategory[nft].usdPrice(nft, paymentUSDToken, data[i], 0)
-                    : oracleForCategory[nft].usdPrice(nft, paymentUSDToken, 0, data[i]);
-
-            weSellAtArr[i] = _weSellAt;
-            weSellAtStockArr[i] = _weSellAtStock;
-            tokenizationCostArr[i] = _tokenizationCost;
-
-            unchecked {
-                ++i;
-            }
-        }
+        uint256 tokenId
+    ) external view returns (uint256 weSellAt, uint256 weSellAtStock, uint256 tokenizationCost) {
+        (weSellAt, weSellAtStock, tokenizationCost) = oracleForCategory[nft].usdPrice(
+            nft,
+            paymentUSDToken,
+            0,
+            tokenId
+        );
     }
 }

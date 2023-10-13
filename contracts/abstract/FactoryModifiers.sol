@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "../interfaces/IFactory.sol";
 import "../interfaces/IOwnable.sol";
-import "../interfaces/IFactoryProvider.sol";
 import "../interfaces/ITangibleNFT.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
  * @title FactoryModifiers
  * @author Veljko Mihailovic
  * @notice This contract offers permissioned modifiers for contracts that have factory permissioned functions.
  */
-abstract contract FactoryModifiers {
+abstract contract FactoryModifiers is Initializable, ContextUpgradeable {
     // ~ State Variables ~
 
-    /// @notice Address of FactoryProvider contract.
-    address public factoryProvider;
+    /// @notice Address of  Factory contract.
+    address public factory;
 
     // ~ Modifiers ~
 
@@ -49,11 +50,11 @@ abstract contract FactoryModifiers {
         _;
     }
 
-    // ~ Constructor ~
+    // ~ Initialize ~
 
-    constructor(address _factoryProvider) {
-        require(_factoryProvider != address(0), "FP zero");
-        factoryProvider = _factoryProvider;
+    function __FactoryModifiers_init(address _factory) internal onlyInitializing {
+        require(_factory != address(0), "FP zero");
+        factory = _factory;
     }
 
     // ~ Functions ~
@@ -63,10 +64,7 @@ abstract contract FactoryModifiers {
      * @dev Only called by modifier `onlyFactoryOwner`. Meant to reduce bytecode size
      */
     function _checkFactoryOwner() internal view {
-        require(
-            IOwnable(IFactoryProvider(factoryProvider).factory()).contractOwner() == msg.sender,
-            "NFO"
-        );
+        require(IOwnable(factory).owner() == msg.sender, "NFO");
     }
 
     /**
@@ -74,7 +72,7 @@ abstract contract FactoryModifiers {
      * @dev Only called by modifier `onlyFactory`. Meant to reduce bytecode size
      */
     function _checkFactory() internal view {
-        require(IFactoryProvider(factoryProvider).factory() == msg.sender, "NFA");
+        require(factory == msg.sender, "NFA");
     }
 
     /**
@@ -82,10 +80,7 @@ abstract contract FactoryModifiers {
      * @dev Only called by modifier `onlyCategoryOwner`. Meant to reduce bytecode size
      */
     function _checkCategoryOwner(ITangibleNFT tnft) internal view {
-        require(
-            IFactory(IFactoryProvider(factoryProvider).factory()).categoryOwner(tnft) == msg.sender,
-            "NCO"
-        );
+        require(IFactory(factory).categoryOwner(tnft) == msg.sender, "NCO");
     }
 
     /**
@@ -94,9 +89,7 @@ abstract contract FactoryModifiers {
      */
     function _checkFingerprintApprover() internal view {
         require(
-            IFactory(IFactoryProvider(factoryProvider).factory()).fingerprintApprovalManager(
-                ITangibleNFT(address(this))
-            ) == msg.sender,
+            IFactory(factory).fingerprintApprovalManager(ITangibleNFT(address(this))) == msg.sender,
             "NFAP"
         );
     }
@@ -106,9 +99,13 @@ abstract contract FactoryModifiers {
      * @dev Only called by modifier `onlyTangibleLabs`. Meant to reduce bytecode size
      */
     function _checkTangibleLabs() internal view {
-        require(
-            IFactory(IFactoryProvider(factoryProvider).factory()).tangibleLabs() == msg.sender,
-            "NLABS"
-        );
+        require(IFactory(factory).tangibleLabs() == msg.sender, "NLABS");
     }
+
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[49] private __gap;
 }

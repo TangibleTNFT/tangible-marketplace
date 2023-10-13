@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 /// @title ITNFTMetadata interface defines the interface of the TNFTMetadata.
 interface ITNFTMetadata {

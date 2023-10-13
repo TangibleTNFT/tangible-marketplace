@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "../interfaces/ICurrencyFeedV2.sol";
 import "../abstract/FactoryModifiers.sol";
@@ -43,7 +43,14 @@ contract CurrencyFeedV2 is ICurrencyFeedV2, FactoryModifiers {
     /// @dev i.e. ISOcountryNumToCode[036] = "AUS"
     mapping(uint16 => string) public ISOcountryNumToCode;
 
-    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _factory) external initializer {
+        __FactoryModifiers_init(_factory);
+    }
 
     /**
      * @notice This method is used to update the state of `ISOcurrencyCodeToNum` and `ISOcurrencyNumToCode`.

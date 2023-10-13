@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./abstract/PriceConverter.sol";
-import "./interfaces/IFactory.sol";
+import "./interfaces/ITangibleMarketplace.sol";
 import "./interfaces/ITNFTMetadata.sol";
 import "./interfaces/IRentManagerDeployer.sol";
 import "./interfaces/IVoucher.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "./interfaces/ITangiblePriceManager.sol";
 import "./interfaces/ITangibleNFTDeployer.sol";
 import "./interfaces/IPriceOracle.sol";
-import "./interfaces/IOwnable.sol";
 
 /**
  * @title Factory
@@ -18,16 +18,9 @@ import "./interfaces/IOwnable.sol";
  * @notice Central factory contract for the Tangible protocol. Manages contract ownership and metadata for all
  *         peripheral contracts in the ecosystem. Also allows for the creation and management of new category Tangible NFTs.
  */
-contract FactoryV2 is IFactory, IOwnable, PriceConverter {
+contract FactoryV2 is IFactory, PriceConverter, Ownable2StepUpgradeable {
     using SafeERC20 for IERC20;
-
     // ~ State Variables ~
-
-    /// @notice This variable stores the address of the contract owner.
-    address internal _contractOwner;
-
-    /// @notice This variable stores the address of a new (temporary) contract owner.
-    address internal _newContractOwner;
 
     /// @notice Default USD contract used for buying unminted tokens and paying for storage when required.
     IERC20 public defUSD;
@@ -180,12 +173,6 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
 
     // ~ Modifiers ~
 
-    /// @notice Modifier used to verify the function caller is the contract owner.
-    modifier onlyOwner() {
-        _checkOwner();
-        _;
-    }
-
     /// @notice Modifier used to verify the function caller is the category owner.
     /// @param nft TangibleNFT contract reference.
     modifier onlyCategoryOwner(ITangibleNFT nft) {
@@ -240,26 +227,30 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
         CURRENCY_FEED
     }
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
 
     /**
-     * @notice Initialized FactoryV2 contract.
+     * @notice Initialize FactoryV2 contract.
      * @param _defaultUSDToken Address of the default USD Erc20 token accepted for payments.
      * @param _tangibleLabs Tangible multisig address.
      */
-    constructor(address _defaultUSDToken, address _tangibleLabs) {
+    function initialize(address _defaultUSDToken, address _tangibleLabs) external initializer {
         require(_defaultUSDToken != address(0), "UZ");
+        __Ownable2Step_init();
 
         defUSD = IERC20(_defaultUSDToken);
         paymentTokens[IERC20(_defaultUSDToken)] = true;
 
-        _contractOwner = msg.sender;
         tangibleLabs = _tangibleLabs;
         categoryMinter[_tangibleLabs] = true;
         categoryOwnerPaymentAddress[_tangibleLabs] = _tangibleLabs;
 
         emit ContractUpdated(uint256(FACT_ADDRESSES.LABS), address(0), _tangibleLabs);
-        emit OwnershipPushed(address(0), _contractOwner);
     }
 
     // ~ Functions ~
@@ -393,10 +384,10 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
      * @return wallet address to be used as payment.
      */
     function _categoryOwnerWallet(ITangibleNFT nft) internal view returns (address wallet) {
-        address owner = categoryOwner[nft];
-        wallet = categoryOwnerPaymentAddress[owner];
+        address _owner = categoryOwner[nft];
+        wallet = categoryOwnerPaymentAddress[_owner];
         if (wallet == address(0)) {
-            wallet = owner;
+            wallet = _owner;
         }
     }
 
@@ -488,7 +479,7 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
     function mint(
         MintVoucher calldata voucher
     ) external onlyLabsOrMarketplace returns (uint256[] memory) {
-        // make sure signature is valid and get the address of the vendor
+        // marketplace must be set before minting
         require(marketplace != address(0), "MZ");
         //make sure that vendor(who is not admin nor marketplace) is minting just for himself
         uint256 mintCount = 1;
@@ -532,53 +523,23 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             //decrease stock
             priceManager.oracleForCategory(voucher.token).decrementSellStock(voucher.fingerprint);
             // send NFT
-            IERC721(voucher.token).safeTransferFrom(
+            IERC721Upgradeable(voucher.token).safeTransferFrom(
                 voucher.vendor,
                 transferTo,
                 tokenIds[i],
                 abi.encode(voucher.price)
             );
+            // if there is a buyer in voucher and sender is the vendor, set the designated buyer
+            if (voucher.buyer != address(0) && voucher.vendor == msg.sender) {
+                ITangibleMarketplace(marketplace).setDesignatedBuyer(
+                    voucher.token,
+                    tokenIds[i],
+                    voucher.buyer
+                );
+            }
         }
 
         return tokenIds;
-    }
-
-    /**
-     * @notice This function creates a new category name for a TangibleNFT contract.
-     * @dev Just for migration puproses, we must avoid unnecessary deployments on new factories.
-     * @param name String name of the category name.
-     * @param nft TangibleNFT contract.
-     * @param _rentManager RentManager contract.
-     * @param priceOracle Address of PriceOracle contract.
-     * @param _owner Category owner address.
-     */
-    function setCategory(
-        string calldata name,
-        ITangibleNFT nft,
-        IRentManager _rentManager,
-        address priceOracle,
-        address _owner
-    ) external onlyOwner {
-        require(address(category[name]) == address(0), "CEZ");
-        category[name] = nft;
-        _tnfts.push(nft);
-
-        //for rent
-        rentManager[nft] = _rentManager;
-
-        //set the oracle
-        priceManager.setOracleForCategory(nft, IPriceOracle(priceOracle));
-
-        categoryOwner[nft] = _owner;
-        // update what contract owner owns
-        if (_owner == _contractOwner) {
-            ownedByLabs.push(nft);
-        }
-
-        fingerprintApprovalManager[nft] = msg.sender;
-
-        emit CategoryMigrated(address(nft));
-        emit CategoryOwner(address(nft), msg.sender);
     }
 
     /**
@@ -639,7 +600,7 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             IPriceOracle(priceOracle)
         );
         // update what owner owns
-        if (msg.sender == _contractOwner) {
+        if (msg.sender == tangibleLabs) {
             ownedByLabs.push(tangibleNFT);
         }
 
@@ -756,47 +717,12 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
     }
 
     /**
-     * @notice This view function returns the address of the contract owner.
-     * @return Address of contract owner.
-     */
-    function contractOwner() public view override returns (address) {
-        return _contractOwner;
-    }
-
-    /**
-     * @notice This function renounces ownership of the contract, assigning address(0) as owner of the contract.
-     */
-    function renounceOwnership() public virtual override onlyOwner {
-        emit OwnershipPushed(_contractOwner, address(0));
-        _contractOwner = address(0);
-    }
-
-    /**
-     * @notice This function assigns a new owner address to _newContractOwner state var.
-     * @param newOwner_ Address we're assigning to _newContractOwner.
-     */
-    function pushOwnership(address newOwner_) public virtual override onlyOwner {
-        require(newOwner_ != address(0), "Ownable: new owner is the zero address");
-        emit OwnershipPushed(_contractOwner, newOwner_);
-        _newContractOwner = newOwner_;
-    }
-
-    /**
-     * @notice This function allows the new contract owner to assign itself as the contract owner.
-     */
-    function pullOwnership() public virtual override {
-        require(msg.sender == _newContractOwner, "Ownable: must be new owner to pull");
-        emit OwnershipPulled(_contractOwner, _newContractOwner);
-        _contractOwner = _newContractOwner;
-    }
-
-    /**
      * @notice This view function is used to return whether or not a specified address is the contract owner.
      * @param account EOA to check owner status.
      * @return If true, account is the contract owner otherwise will be false.
      */
     function isOwner(address account) internal view returns (bool) {
-        return _contractOwner == account;
+        return owner() == account;
     }
 
     /**
@@ -817,13 +743,5 @@ contract FactoryV2 is IFactory, IOwnable, PriceConverter {
             address(nft) != address(0) && categoryOwner[nft] == msg.sender,
             "Caller is not category owner"
         );
-    }
-
-    /**
-     * @notice This internal method is used to check if msg.sender is the owner.
-     * @dev Only called by modifier `onlyOwner`. Meant to reduce bytecode size
-     */
-    function _checkOwner() internal view {
-        require(_contractOwner == msg.sender, "Ownable: caller is not the owner");
     }
 }

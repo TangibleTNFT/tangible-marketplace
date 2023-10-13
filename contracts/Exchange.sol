@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./abstract/FactoryModifiers.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IWETH9.sol";
 import "./interfaces/IExchange.sol";
-import "./interfaces/IOwnable.sol";
-import "./interfaces/IFactoryProvider.sol";
+
 import "./exchangeInterfaces/IPearlRouter.sol";
 
 /**
@@ -31,13 +30,20 @@ contract ExchangeV2 is IExchange, FactoryModifiers {
     /// @notice TODO
     mapping(bytes => bool) public stable;
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initialize ~
 
     /**
      * @notice Initializes the Exchange contract
-     * @param _factoryProvider Address for the FactoryProvider contract.
+     * @param _factory Address for the  Factory contract.
      */
-    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
+    function initialize(address _factory) external initializer {
+        __FactoryModifiers_init(_factory);
+    }
 
     // ~ External Funcions ~
 

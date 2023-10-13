@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./interfaces/IFactory.sol";
-import "./interfaces/IFactoryProvider.sol";
+
 import "./abstract/FactoryModifiers.sol";
-import "./interfaces/IOwnable.sol";
 
 /**
  * @title TNFTMetadata
@@ -38,9 +37,6 @@ contract TNFTMetadata is FactoryModifiers {
         bool paysRent;
         string description;
     }
-
-    /// @notice Stores the address of the Factory contract.
-    address public factory;
 
     /// @notice Array of supported Tnft Types.
     uint256[] public tnftTypesArray;
@@ -108,13 +104,20 @@ contract TNFTMetadata is FactoryModifiers {
      */
     event FeatureRemovedFromTnftType(uint256 tnftType, uint256 indexed feature);
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
 
     /**
      * @notice Used to initialize TNFTMetadata.
-     * @param _factoryProvider Address of FactoryProvider contract.
+     * @param _factory Address of Factory contract.
      */
-    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
+    function initialize(address _factory) external initializer {
+        __FactoryModifiers_init(_factory);
+    }
 
     // ~ Functions ~
 
@@ -278,15 +281,6 @@ contract TNFTMetadata is FactoryModifiers {
                 ++i;
             }
         }
-    }
-
-    /**
-     * @notice This function is used to update the 'factory' variable.
-     * @param _factory New Factory address.
-     */
-    function setFactory(address _factory) external onlyFactoryOwner {
-        require(_factory != address(0), "Factory zero");
-        factory = _factory;
     }
 
     /**

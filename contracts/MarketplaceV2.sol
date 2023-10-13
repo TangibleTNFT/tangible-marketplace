@@ -1,29 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./interfaces/ITangibleMarketplace.sol";
 import "./interfaces/IRentManager.sol";
 import "./interfaces/IWETH9.sol";
 import "./interfaces/ISellFeeDistributor.sol";
-import "./interfaces/IOwnable.sol";
 import "./interfaces/IOnSaleTracker.sol";
 import "./interfaces/IVoucher.sol";
 
-import "./interfaces/IFactoryProvider.sol";
-import "./interfaces/IOwnable.sol";
 import "./abstract/FactoryModifiers.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
 /**
  * @title Marketplace
  * @author Veljko Mihailovic
  * @notice This smart contract facilitates the buying and selling of Tangible NFTs.
  */
-contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModifiers {
+contract TNFTMarketplaceV2 is
+    ITangibleMarketplace,
+    IERC721Receiver,
+    FactoryModifiers,
+    ReentrancyGuardUpgradeable
+{
     using SafeERC20 for IERC20;
 
     // ~ State Variables ~
@@ -43,6 +46,9 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
     /// @notice This mapping is used to store the marketplace fees attached to each category of TNFTs.
     /// @dev The fees use 2 basis points for precision (i.e. 15% == 1500 // 2.5% == 250).
     mapping(ITangibleNFT => uint256) public feesPerCategory;
+
+    /// @notice This mapping is used to store the initial sale status of each TNFT.
+    mapping(ITangibleNFT => mapping(uint256 => bool)) public initialSaleCompleted;
 
     // ~ Events ~
 
@@ -150,12 +156,20 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         uint256 amount
     );
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
     /**
      * @notice Initializes Marketplace contract.
-     * @param _factoryProvider Address of Factory provider contract
+     * @param _factory Address of Factory provider contract
      */
-    constructor(address _factoryProvider) FactoryModifiers(_factoryProvider) {}
+    function initialize(address _factory) external initializer {
+        __FactoryModifiers_init(_factory);
+        __ReentrancyGuard_init();
+    }
 
     // ~ Functions ~
 
@@ -167,18 +181,19 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
      * @param paymentToken Erc20 token being used as payment.
      * @param tokenIds Array of tokenIds to sell.
      * @param price Price per token.
+     * @param designatedBuyer If not zero address, only this address can buy.
      */
     function sellBatch(
         ITangibleNFT nft,
         IERC20 paymentToken,
         uint256[] calldata tokenIds,
-        uint256[] calldata price
+        uint256[] calldata price,
+        address designatedBuyer
     ) external {
-        IFactory factory = IFactory(IFactoryProvider(factoryProvider).factory());
-        require(factory.paymentTokens(paymentToken), "NAT");
+        require(IFactory(factory).paymentTokens(paymentToken), "NAT");
         uint256 length = tokenIds.length;
         for (uint256 i; i < length; ) {
-            _sell(nft, paymentToken, tokenIds[i], price[i]);
+            _sell(nft, paymentToken, tokenIds[i], price[i], designatedBuyer);
             unchecked {
                 ++i;
             }
@@ -201,8 +216,15 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
      * @param paymentToken Erc20 token being accepted as payment by seller.
      * @param tokenId TNFT token identifier.
      * @param price Price the token is being listed for.
+     * @param designatedBuyer If not zero address, only this address can buy.
      */
-    function _sell(ITangibleNFT nft, IERC20 paymentToken, uint256 tokenId, uint256 price) internal {
+    function _sell(
+        ITangibleNFT nft,
+        IERC20 paymentToken,
+        uint256 tokenId,
+        uint256 price,
+        address designatedBuyer
+    ) internal {
         //check who is the owner
         address ownerOfNft = nft.ownerOf(tokenId);
         //if marketplace is owner and seller wants to update price
@@ -218,6 +240,9 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
 
             // set the desired payment token
             marketplaceLot[address(nft)][tokenId].paymentToken = paymentToken;
+        }
+        if (designatedBuyer != address(0)) {
+            marketplaceLot[address(nft)][tokenId].designatedBuyer = designatedBuyer;
         }
     }
 
@@ -273,7 +298,7 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         //update tracker
         _updateTrackerTnft(nft, tokenId, false);
 
-        IERC721(nft).safeTransferFrom(address(this), _lot.seller, _lot.tokenId);
+        IERC721Upgradeable(nft).safeTransferFrom(address(this), _lot.seller, _lot.tokenId);
     }
 
     /**
@@ -282,7 +307,7 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
      * @param tokenId TNFT identifier.
      * @param _years Num of years to pay for storage.
      */
-    function buy(ITangibleNFT nft, uint256 tokenId, uint256 _years) external {
+    function buy(ITangibleNFT nft, uint256 tokenId, uint256 _years) external nonReentrant {
         //pay for storage
         if ((!nft.isStorageFeePaid(tokenId) || _years > 0) && nft.storageRequired()) {
             require(_years > 0, "YZ");
@@ -292,6 +317,13 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
                 tokenId,
                 _years
             );
+        }
+        // if initial sale is not done, and whitelitsing is required, check if buyer is whitelisted
+        if (
+            IFactory(factory).onlyWhitelistedForUnmintedCategory(nft) &&
+            !initialSaleCompleted[nft][tokenId]
+        ) {
+            require(IFactory(factory).whitelistForBuyUnminted(nft, msg.sender), "NW");
         }
         //buy the token
         _buy(nft, tokenId, true);
@@ -329,13 +361,16 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         require(nft.storageRequired(), "STNR");
         require(_years > 0, "YZ");
 
-        IFactory factory = IFactory(IFactoryProvider(factoryProvider).factory());
-
-        uint256 amount = factory.adjustStorageAndGetAmount(nft, paymentToken, tokenId, _years);
+        uint256 amount = IFactory(factory).adjustStorageAndGetAmount(
+            nft,
+            paymentToken,
+            tokenId,
+            _years
+        );
         //we take in default USD token
         IERC20(address(paymentToken)).safeTransferFrom(
             msg.sender,
-            factory.categoryOwnerWallet(nft),
+            IFactory(factory).categoryOwnerWallet(nft),
             amount
         );
         emit StorageFeePaid(msg.sender, address(nft), tokenId, address(paymentToken), amount);
@@ -353,16 +388,15 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         IERC20 paymentToken,
         uint256 _fingerprint,
         uint256 _years
-    ) external returns (uint256 tokenId) {
-        IFactory factory = IFactory(IFactoryProvider(factoryProvider).factory());
-        if (factory.onlyWhitelistedForUnmintedCategory(nft)) {
-            require(factory.whitelistForBuyUnminted(nft, msg.sender), "NW");
+    ) external nonReentrant returns (uint256 tokenId) {
+        if (IFactory(factory).onlyWhitelistedForUnmintedCategory(nft)) {
+            require(IFactory(factory).whitelistForBuyUnminted(nft, msg.sender), "NW");
         }
 
         if (address(paymentToken) == address(0)) {
-            paymentToken = factory.defUSD();
+            paymentToken = IFactory(factory).defUSD();
         }
-        require(factory.paymentTokens(paymentToken), "TNAPP");
+        require(IFactory(factory).paymentTokens(paymentToken), "TNAPP");
         //buy unminted is always initial sale!!
         // need to also fetch stock here!! and remove remainingMintsForVendor
         (uint256 tokenPrice, uint256 stock, uint256 tokenizationCost) = _itemPrice(
@@ -378,12 +412,12 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
             token: nft,
             mintCount: 1,
             price: 0,
-            vendor: factory.categoryOwnerWallet(nft),
+            vendor: IFactory(factory).categoryOwnerWallet(nft),
             buyer: msg.sender,
             fingerprint: _fingerprint,
             sendToVendor: false
         });
-        uint256[] memory tokenIds = factory.mint(voucher);
+        uint256[] memory tokenIds = IFactory(factory).mint(voucher);
         tokenId = tokenIds[0];
         //pay for storage
         if (nft.storageRequired() && !nft.isStorageFeePaid(tokenId)) {
@@ -411,16 +445,15 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         uint256 data,
         bool fromFingerprints
     ) internal view returns (uint256 weSellAt, uint256 weSellAtStock, uint256 tokenizationCost) {
-        IFactory factory = IFactory(IFactoryProvider(factoryProvider).factory());
         return
             fromFingerprints
-                ? factory.priceManager().oracleForCategory(nft).usdPrice(
+                ? IFactory(factory).priceManager().oracleForCategory(nft).usdPrice(
                     nft,
                     paymentUSDToken,
                     data,
                     0
                 )
-                : factory.priceManager().oracleForCategory(nft).usdPrice(
+                : IFactory(factory).priceManager().oracleForCategory(nft).usdPrice(
                     nft,
                     paymentUSDToken,
                     0,
@@ -440,6 +473,10 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
 
         Lot memory _lot = marketplaceLot[address(nft)][tokenId];
         require(_lot.seller != address(0), "NLO");
+        // if there is a buyer set, only that buyer can buy
+        if (_lot.designatedBuyer != address(0)) {
+            require(_lot.designatedBuyer == buyer, "NDB");
+        }
         IERC20 pToken = _lot.paymentToken;
 
         // if lot.price == 0 it means vendor minted it, we must take price from oracle
@@ -471,9 +508,7 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
             emit MarketplaceFeePaid(address(nft), tokenId, fee);
         }
         // fetch rent manager
-        IRentManagerExt rentManager = IRentManagerExt(
-            address(IFactory(IFactoryProvider(factoryProvider).factory()).rentManager(nft))
-        );
+        IRentManagerExt rentManager = IRentManagerExt(address(IFactory(factory).rentManager(nft)));
         if (address(rentManager) != address(0)) {
             if (rentManager.claimableRentForToken(tokenId) != 0) {
                 uint256 claimed = rentManager.claimRentForToken(tokenId);
@@ -489,6 +524,10 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         //update tracker
         _updateTrackerTnft(nft, tokenId, false);
 
+        if (initialSaleCompleted[nft][tokenId] == false) {
+            initialSaleCompleted[nft][tokenId] = true;
+        }
+
         nft.safeTransferFrom(address(this), buyer, tokenId);
     }
 
@@ -500,6 +539,18 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
     function setSellFeeAddress(address _sellFeeAddress) external onlyFactoryOwner {
         emit SellFeeAddressSet(sellFeeAddress, _sellFeeAddress);
         sellFeeAddress = _sellFeeAddress;
+    }
+
+    function setDesignatedBuyer(
+        ITangibleNFT nft,
+        uint256 tokenId,
+        address designatedBuyer
+    ) external {
+        require(
+            msg.sender == marketplaceLot[address(nft)][tokenId].seller || msg.sender == factory,
+            "NATS"
+        );
+        marketplaceLot[address(nft)][tokenId].designatedBuyer = designatedBuyer;
     }
 
     /**
@@ -537,13 +588,22 @@ contract TNFTMarketplaceV2 is ITangibleMarketplace, IERC721Receiver, FactoryModi
         uint256 tokenId,
         bytes calldata data
     ) private returns (bytes4) {
-        IFactory factory = IFactory(IFactoryProvider(factoryProvider).factory());
         address nft = msg.sender;
         uint256 price = abi.decode(data, (uint256));
-        IERC20 defUSD = factory.defUSD();
-        require(address(factory.category(ITangibleNFT(nft).name())) != address(0), "Not TNFT");
+        IERC20 defUSD = IFactory(factory).defUSD();
+        require(
+            address(IFactory(factory).category(ITangibleNFT(nft).name())) != address(0),
+            "Not TNFT"
+        );
 
-        marketplaceLot[nft][tokenId] = Lot(ITangibleNFT(nft), defUSD, tokenId, seller, price);
+        marketplaceLot[nft][tokenId] = Lot(
+            ITangibleNFT(nft),
+            defUSD,
+            tokenId,
+            seller,
+            price,
+            address(0)
+        );
         emit Selling(seller, nft, tokenId, price);
         _updateTrackerTnft(ITangibleNFT(nft), tokenId, true);
 

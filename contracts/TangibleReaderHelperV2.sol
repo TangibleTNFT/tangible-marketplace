@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./interfaces/IFactory.sol";
-import "./interfaces/IFactoryProvider.sol";
 import "./interfaces/ITangibleMarketplace.sol";
 import "./interfaces/IMarketplace.sol";
 import "./interfaces/IPassiveIncomeNFT.sol";
@@ -16,8 +15,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract TangibleReaderHelperV2 {
     // ~ State Variables ~
 
-    /// @notice Stores a reference to the FactoryProvider contract.
-    IFactoryProvider public factoryProvider;
+    /// @notice Stores a reference to the Factory contract.
+    IFactory public factory;
 
     /// @notice Stores a reference to the passiveNFT contract.
     IPassiveIncomeNFT public passiveNft;
@@ -29,17 +28,13 @@ contract TangibleReaderHelperV2 {
 
     /**
      * @notice Initializes TangibleReaderHelper
-     * @param _factoryProvider FactoryProvider contract reference.
+     * @param _factory Factory contract reference.
      * @param _passiveNft PassiveNFT contract reference.
      * @param _revenueShare RevenueShare contract reference.
      */
-    constructor(
-        IFactoryProvider _factoryProvider,
-        IPassiveIncomeNFT _passiveNft,
-        RevenueShare _revenueShare
-    ) {
-        require(address(_factoryProvider) != address(0), "FP 0");
-        factoryProvider = _factoryProvider;
+    constructor(IFactory _factory, IPassiveIncomeNFT _passiveNft, RevenueShare _revenueShare) {
+        require(address(_factory) != address(0), "FP 0");
+        factory = _factory;
         passiveNft = _passiveNft;
         revenueShare = _revenueShare;
     }
@@ -208,7 +203,7 @@ contract TangibleReaderHelperV2 {
         result = new ITangibleMarketplaceExt.Lot[](length);
 
         ITangibleMarketplaceExt marketplace = ITangibleMarketplaceExt(
-            IFactory(factoryProvider.factory()).marketplace()
+            IFactory(factory).marketplace()
         );
 
         for (uint256 i; i < length; ) {

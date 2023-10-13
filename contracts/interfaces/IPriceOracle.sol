@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./ITangibleNFT.sol";
@@ -25,6 +25,20 @@ interface IPriceOracle {
     function availableInStock(uint256 fingerprint) external returns (uint256 weSellAtStock);
 
     /// @dev The function that returns item price in USD, indexed in payment token.
+    function usdPrices(
+        ITangibleNFT nft,
+        IERC20Metadata paymentUSDToken,
+        uint256[] calldata fingerprint,
+        uint256[] calldata tokenId
+    )
+        external
+        view
+        returns (
+            uint256[] memory weSellAt,
+            uint256[] memory weSellAtStock,
+            uint256[] memory tokenizationCost
+        );
+
     function usdPrice(
         ITangibleNFT nft,
         IERC20Metadata paymentUSDToken,

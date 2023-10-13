@@ -1,27 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./interfaces/IFactory.sol";
-import "./interfaces/IFactoryProvider.sol";
+
 import "./interfaces/ITangibleNFT.sol";
-import "./interfaces/IOwnable.sol";
 import "./interfaces/ITNFTMetadata.sol";
 import "./abstract/FactoryModifiers.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Pausable.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721PausableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC721/extensions/ERC721EnumerableUpgradeable.sol";
 
 /**
  * @title TangibleNFTV2
  * @author Veljko Mihailovic
  * @notice This is the Erc721 contract for the Tangible NFTs. Manages each asset's unique metadata and category.
  */
-contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable, FactoryModifiers {
-    using SafeERC20 for IERC20;
-    using Strings for uint256;
+contract TangibleNFTV2 is
+    ITangibleNFT,
+    ERC721Upgradeable,
+    ERC721EnumerableUpgradeable,
+    ERC721PausableUpgradeable,
+    FactoryModifiers
+{
+    using StringsUpgradeable for uint256;
 
     // ~ State variables -> packed: (591 bytes -> 19+ slots) ~
 
@@ -35,14 +35,17 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
     /// @dev eg 0x0000001 -> 3.
     mapping(uint256 => uint256) public tokensFingerprint;
 
+    /// @notice A mapping from fingerprint identifier to an array of tokenIds.
+    mapping(uint256 => uint256[]) public fingerprintTokens;
+
     /// @notice Array for storing fingerprint identifiers.
     uint256[] public fingeprintsInTnft;
 
     /// @notice Used to assign a unique tokenId identifier to each NFT minted.
-    uint256 private _lastTokenId = 0;
+    uint256 public lastTokenId;
 
     /// @notice A mapping used to store the address of original token minters.
-    mapping(uint256 => address) private _originalTokenOwners;
+    // mapping(uint256 => address) private _originalTokenOwners;
 
     /// @notice A mapping from tokenId to bool. If a tokenId is set to true.
     mapping(uint256 => bool) public blackListedTokens;
@@ -61,13 +64,13 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
 
     /// @notice Identifier for product type
     /// @dev Categories are no longer unique, tnftType will be used to identify the type of products the TangibleNFT mints.
-    uint256 public immutable tnftType;
+    uint256 public tnftType;
 
     /// @notice Used to store the block timestamp when this contract was deployed.
     uint256 public deploymentBlock;
 
     /// @notice TODO
-    uint8 public storageDecimals = 2;
+    uint8 public storageDecimals;
 
     /// @notice Used to store the percentage price per year for storage.
     /// @dev Max percent precision is 2 decimals (i.e 100% is 10000 // 0.01% is 1).
@@ -155,11 +158,16 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
      */
     event TnftFeature(uint256 indexed tokenId, uint256 indexed feature, bool added);
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
 
     /**
      * @notice Initializes TangibleNFT.
-     * @param _factoryProvider FactoryProvider contract address.
+     * @param _factory  Factory contract address.
      * @param _category TNFT contract name.
      * @param _symbol TNFT contract symbol.
      * @param _uri base URI for fetching metadata from provider.
@@ -168,8 +176,8 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
      * @param _symbolInUri If true, `_symbol` will be appended to the `_uri`.
      * @param _tnftType Tnft Type -> TNFTMetdata tracks all supported types.
      */
-    constructor(
-        address _factoryProvider,
+    function initialize(
+        address _factory,
         string memory _category,
         string memory _symbol,
         string memory _uri,
@@ -177,7 +185,11 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
         bool _storageRequired,
         bool _symbolInUri,
         uint256 _tnftType
-    ) ERC721(_category, _symbol) FactoryModifiers(_factoryProvider) {
+    ) external initializer {
+        __ERC721_init(_category, _symbol);
+        __ERC721Pausable_init();
+        __ERC721Enumerable_init();
+        __FactoryModifiers_init(_factory);
         _baseUriLink = _uri;
 
         storagePriceFixed = _storagePriceFixed;
@@ -188,6 +200,8 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
 
         deploymentBlock = block.number;
         tnftType = _tnftType;
+        storageDecimals = 2;
+        lastTokenId = 0;
     }
 
     // ~ External Functions ~
@@ -369,9 +383,7 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
         uint256[] calldata _features
     ) external onlyCategoryOwner(ITangibleNFT(address(this))) {
         require(_exists(tokenId), "token not minted");
-        ITNFTMetadata tnftMetadata = ITNFTMetadata(
-            IFactory(IFactoryProvider(factoryProvider).factory()).tnftMetadata()
-        );
+        ITNFTMetadata tnftMetadata = ITNFTMetadata(IFactory(factory).tnftMetadata());
         uint256 length = _features.length;
 
         for (uint256 i; i < length; ) {
@@ -396,9 +408,7 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
         uint256 tokenId,
         uint256[] calldata _features
     ) external onlyCategoryOwner(ITangibleNFT(address(this))) {
-        ITNFTMetadata tnftMetadata = ITNFTMetadata(
-            IFactory(IFactoryProvider(factoryProvider).factory()).tnftMetadata()
-        );
+        ITNFTMetadata tnftMetadata = ITNFTMetadata(IFactory(factory).tnftMetadata());
         uint256 length = _features.length;
 
         for (uint256 i; i < length; ) {
@@ -484,6 +494,14 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
         return fingeprintsInTnft.length;
     }
 
+    function getFingerprintTokens(uint256 fingerprint) external view returns (uint256[] memory) {
+        return fingerprintTokens[fingerprint];
+    }
+
+    function getFingerprintTokensSize(uint256 fingerprint) external view returns (uint256) {
+        return fingerprintTokens[fingerprint].length;
+    }
+
     // ~ Public Functions ~
 
     /**
@@ -493,7 +511,7 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
      */
     function tokenURI(
         uint256 tokenId
-    ) public view override(ERC721, IERC721Metadata) returns (string memory) {
+    ) public view override(ERC721Upgradeable, IERC721MetadataUpgradeable) returns (string memory) {
         return
             bytes(_baseUriLink).length > 0
                 ? symbolInUri
@@ -511,10 +529,8 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
     function isApprovedForAll(
         address account,
         address operator
-    ) public view override(ERC721, IERC721) returns (bool) {
-        return
-            operator == IFactoryProvider(factoryProvider).factory() ||
-            ERC721.isApprovedForAll(account, operator);
+    ) public view override(ERC721Upgradeable, IERC721Upgradeable) returns (bool) {
+        return operator == factory || ERC721Upgradeable.isApprovedForAll(account, operator);
     }
 
     /**
@@ -534,7 +550,13 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
      */
     function supportsInterface(
         bytes4 interfaceId
-    ) public view virtual override(ERC721, ERC721Enumerable, IERC165) returns (bool) {
+    )
+        public
+        view
+        virtual
+        override(ERC721Upgradeable, ERC721EnumerableUpgradeable, IERC165Upgradeable)
+        returns (bool)
+    {
         return super.supportsInterface(interfaceId);
     }
 
@@ -547,13 +569,15 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
      * @return tokenId that is minted
      */
     function _produceTNFTtoStock(address to, uint256 fingerprint) internal returns (uint256) {
-        uint256 tokenToMint = ++_lastTokenId;
+        uint256 tokenToMint = ++lastTokenId;
 
         //create new tnft and update last produced tnft in map
         _safeMint(to, tokenToMint);
         //store fingerprint to token id
         tokensFingerprint[tokenToMint] = fingerprint;
-        _originalTokenOwners[tokenToMint] = to;
+        //store token id to fingerprint
+        fingerprintTokens[fingerprint].push(tokenToMint);
+        // _originalTokenOwners[tokenToMint] = to;
         tnftCustody[tokenToMint] = true;
 
         return tokenToMint;
@@ -596,10 +620,9 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
         address to,
         uint256 tokenId,
         uint256 batchSize
-    ) internal override(ERC721, ERC721Enumerable, ERC721Pausable) {
+    ) internal override(ERC721Upgradeable, ERC721EnumerableUpgradeable, ERC721PausableUpgradeable) {
         super._beforeTokenTransfer(from, to, tokenId, batchSize);
         // Allow operations if admin, factory or 0 address
-        address factory = IFactoryProvider(factoryProvider).factory();
         if (
             IFactory(factory).categoryOwner(ITangibleNFT(address(this))) == from ||
             (factory == from) ||
@@ -617,7 +640,7 @@ contract TangibleNFTV2 is ITangibleNFT, ERC721, ERC721Enumerable, ERC721Pausable
         if (!storageRequired) {
             return;
         }
-        if (!_isStorageFeePaid(tokenId) && _originalTokenOwners[tokenId] != from) {
+        if (!_isStorageFeePaid(tokenId)) {
             if (msg.sender != factory) {
                 revert("CT");
             }

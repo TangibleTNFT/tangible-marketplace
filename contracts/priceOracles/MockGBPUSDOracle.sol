@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-pragma solidity 0.8.21;
+pragma solidity ^0.8.21;
 
 /**
  * @title The Owned contract
@@ -13,7 +13,7 @@ contract Owned {
     event OwnershipTransferRequested(address indexed from, address indexed to);
     event OwnershipTransferred(address indexed from, address indexed to);
 
-    constructor() {
+    constructor() public {
         owner = msg.sender;
     }
 
@@ -110,7 +110,7 @@ interface AggregatorV2V3Interface is AggregatorInterface, AggregatorV3Interface 
  * @notice Only access enabled addresses are allowed to access getters for
  * aggregated answers and round information.
  */
-contract UsdUsdOracle is AggregatorV2V3Interface, Owned {
+contract MockGBPUSDOracle is AggregatorV2V3Interface, Owned {
     /**
      * @notice Reads the current answer from aggregator delegated to.
      * @dev overridden function to add the checkAccess() modifier
@@ -121,7 +121,7 @@ contract UsdUsdOracle is AggregatorV2V3Interface, Owned {
      * instead which includes better verification information.
      */
     function latestAnswer() public view override returns (int256) {
-        return 1;
+        return 130000000;
     }
 
     /**
@@ -158,14 +158,14 @@ contract UsdUsdOracle is AggregatorV2V3Interface, Owned {
             uint80 answeredInRound
         )
     {
-        return (1, latestAnswer(), block.timestamp, block.timestamp, 1);
+        return (1, latestAnswer(), 1, 1, 1);
     }
 
     /**
      * @notice represents the number of decimals the aggregator responses represent.
      */
     function decimals() external view override returns (uint8) {
-        return 0;
+        return 8;
     }
 
     /**
@@ -173,30 +173,30 @@ contract UsdUsdOracle is AggregatorV2V3Interface, Owned {
      * points to.
      */
     function version() external view override returns (uint256) {
-        return 1;
+        return 4;
     }
 
     /**
      * @notice returns the description of the aggregator the proxy points to.
      */
     function description() external view override returns (string memory) {
-        return "USD/USD";
+        return "GBP/USD";
     }
 
     function getAnswer(uint256 roundId) external view override returns (int256) {
-        return 1;
+        return 0;
     }
 
     function getTimestamp(uint256 roundId) external view override returns (uint256) {
-        return block.timestamp;
+        return 0;
     }
 
     function latestRound() external view override returns (uint256) {
-        return 1;
+        return 0;
     }
 
     function latestTimestamp() external view override returns (uint256) {
-        return block.timestamp;
+        return 0;
     }
 
     function getRoundData(
@@ -213,6 +213,6 @@ contract UsdUsdOracle is AggregatorV2V3Interface, Owned {
             uint80 answeredInRound
         )
     {
-        return (1, latestAnswer(), block.timestamp, block.timestamp, 1);
+        return (0, 0, 0, 0, 0);
     }
 }

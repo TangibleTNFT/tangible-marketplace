@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
-import "./interfaces/IOwnable.sol";
 import "./interfaces/IRentManager.sol";
-import "./interfaces/IFactoryProvider.sol";
+
 import "./interfaces/ITangibleNFT.sol";
 
 import "./abstract/FactoryModifiers.sol";
@@ -46,7 +45,7 @@ contract RentManager is IRentManager, FactoryModifiers {
     // ~ State Variables ~
 
     /// @notice Used to store the contract address of the TangibleNFT contract address(this) manages rent for.
-    address public immutable TNFT_ADDRESS;
+    address public TNFT_ADDRESS;
 
     /// @notice Used to store the address that deposits rent into this contract.
     address public depositor;
@@ -126,18 +125,22 @@ contract RentManager is IRentManager, FactoryModifiers {
         DAYS_29
     }
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
 
     /**
      * @dev Constructor that initializes the TNFT contract address.
      * @param _tnftAddress The address of the TNFT contract.
      */
-    constructor(address _tnftAddress, address _factoryProvider) FactoryModifiers(_factoryProvider) {
+    function initialize(address _tnftAddress, address _factory) external initializer {
         require(_tnftAddress != address(0), "TNFT address cannot be 0");
+        __FactoryModifiers_init(_factory);
         TNFT_ADDRESS = _tnftAddress;
-        depositor = IFactory(IFactoryProvider(factoryProvider).factory()).categoryOwner(
-            ITangibleNFT(_tnftAddress)
-        );
+        depositor = IFactory(factory).categoryOwner(ITangibleNFT(_tnftAddress));
     }
 
     // ~ Functions ~
@@ -282,6 +285,49 @@ contract RentManager is IRentManager, FactoryModifiers {
         return _claimableRentForToken(tokenId);
     }
 
+    /**
+     * @dev Returns the amount of rent that can be claimed for a given token.
+     *
+     * The function calculates the claimable rents based on the rent info of the token.
+     *
+     * @param tokenIds The IDs of the tokens.
+     * @return claimables The amounts of claimable rent per tokens.
+     */
+    function claimableRentForTokenBatch(
+        uint256[] calldata tokenIds
+    ) public view returns (uint256[] memory claimables) {
+        uint256 length = tokenIds.length;
+        claimables = new uint256[](length);
+        for (uint256 i; i < length; ) {
+            claimables[i] = _claimableRentForToken(tokenIds[i]);
+            unchecked {
+                ++i;
+            }
+        }
+        return claimables;
+    }
+
+    /**
+     * @dev Returns the total amount of rent that can be claimed for a given token.
+     *
+     * The function calculates the total claimable rent based on the rent info of the token.
+     *
+     * @param tokenIds The IDs of the tokens.
+     * @return claimable The amount of claimable rent in total.
+     */
+    function claimableRentForTokenBatchTotal(
+        uint256[] calldata tokenIds
+    ) public view returns (uint256 claimable) {
+        uint256 length = tokenIds.length;
+        for (uint256 i; i < length; ) {
+            claimable += _claimableRentForToken(tokenIds[i]);
+            unchecked {
+                ++i;
+            }
+        }
+        return claimable;
+    }
+
     function _claimableRentForToken(uint256 tokenId) internal view returns (uint256) {
         RentInfo storage rent = rentInfo[tokenId];
         if (!rent.distributionRunning) {
@@ -309,6 +355,26 @@ contract RentManager is IRentManager, FactoryModifiers {
         require(nftContract.ownerOf(tokenId) == msg.sender, "Caller is not the owner of the token");
 
         return _claimRentForToken(msg.sender, tokenId);
+    }
+
+    function claimRentForTokenBatch(
+        uint256[] calldata tokenIds
+    ) external returns (uint256[] memory claimed) {
+        IERC721 nftContract = IERC721(TNFT_ADDRESS);
+        uint256 length = tokenIds.length;
+        claimed = new uint256[](length);
+        for (uint256 i; i < length; ) {
+            require(
+                nftContract.ownerOf(tokenIds[i]) == msg.sender,
+                "Caller is not the owner of the token"
+            );
+            claimed[i] = _claimRentForToken(msg.sender, tokenIds[i]);
+            unchecked {
+                ++i;
+            }
+        }
+
+        return claimed;
     }
 
     function _claimRentForToken(

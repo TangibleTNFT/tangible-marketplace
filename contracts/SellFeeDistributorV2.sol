@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.21;
 
 import "./interfaces/ISellFeeDistributor.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -25,10 +25,10 @@ contract SellFeeDistributorV2 is ISellFeeDistributor, FactoryModifiers {
     uint256 private constant FULL_PORTION = 100_000000000;
 
     /// @notice Stores the address for USDC stablecoin.
-    IERC20 public immutable USDC;
+    IERC20 public USDC;
 
     /// @notice Stores the address of the native TNGBL Erc20 token.
-    IERC20 public immutable TNGBL;
+    IERC20 public TNGBL;
 
     /// @notice Stores the address where the revenue portion of fees are distributed.
     address public revenueShare;
@@ -47,23 +47,29 @@ contract SellFeeDistributorV2 is ISellFeeDistributor, FactoryModifiers {
     /// @notice This event is emitted when TNGBL tokens are burned.
     event TangibleBurned(uint256 burnedTngbl);
 
-    // ~ Constructor ~
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    // ~ Initializer ~
 
     /**
      * @notice Initializes SellFeeDistributor.
-     * @param _factoryProvider Address of FactoryProvider contract.
+     * @param _factory Address of  Factory contract.
      * @param _revenueShare Address of RevenueShare.
      * @param _usdc Address of USDC stablecoin.
      * @param _tngbl Address of TNGBL token.
      * @param _isMainnet If deploying to mainnet will be true.
      */
-    constructor(
-        address _factoryProvider,
+    function initialize(
+        address _factory,
         address _revenueShare,
         address _usdc,
         address _tngbl,
         bool _isMainnet
-    ) FactoryModifiers(_factoryProvider) {
+    ) external initializer {
+        __FactoryModifiers_init(_factory);
         USDC = IERC20(_usdc);
         TNGBL = IERC20(_tngbl);
         revenueShare = _revenueShare;
